@@ -1,0 +1,333 @@
+       CBL CICS("SP")                                                   00010000
+       IDENTIFICATION DIVISION.                                         00020000
+       PROGRAM-ID. RZRX3270.                                            00030000
+      ***************************************************************** 00040000
+      *                                                               * 00050000
+      * Authors:  Randy Frerking and Rich Jackson                     * 00062000
+      *           Walmart Technology                                  * 00062000
+      *                                                               * 00050000
+      * This program executes as a terminal transaction to perform    * 00062000
+      * Create, Read, Update, Delete (CRUD) requests.                 * 00063000
+      *                                                               * 00066000
+      * Date       Name    Description                                * 00067000
+      * --------- ------- ------------------------------------------- * 00068000
+      *                                                               * 00069000
+      * 2016/02/04 Randy   Create base code                           * 00070000
+      ***************************************************************** 00071600
+       ENVIRONMENT DIVISION.                                            00071700
+       DATA DIVISION.                                                   00071800
+       WORKING-STORAGE SECTION.                                         00071900
+                                                                        00072000
+      ***************************************************************** 00073000
+      * DEFINE LOCAL VARIABLES                                        * 00074000
+      ***************************************************************** 00075000
+       01  APPLID                 PIC  X(08) VALUE SPACES.              00077000
+       01  EIGHTY                 PIC S9(04) COMP  VALUE 80.            00079000
+
+       01  THE-KEY                PIC  9(05) VALUE ZEROES.
+       01  THE-MESSAGE            PIC  X(75) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * Start - 3270 resources                                        * 00234500
+      ***************************************************************** 00234600
+       01  TC-LENGTH              PIC S9(04) VALUE ZEROES COMP.
+       01  TC-INPUT               PIC  X(80) VALUE SPACES.
+       01  TC-TRANID              PIC  X(04) VALUE SPACES.
+       01  TC-COMMAND             PIC  X(06) VALUE SPACES.
+
+       01  TC-CREATE              PIC  X(06) VALUE 'CREATE'.
+       01  TC-READ                PIC  X(06) VALUE 'READ  '.
+       01  TC-UPDATE              PIC  X(06) VALUE 'UPDATE'.
+       01  TC-DELETE              PIC  X(06) VALUE 'DELETE'.
+
+       01  TC-200                 PIC  9(03) VALUE 200.
+       01  TC-400                 PIC  9(03) VALUE 400.
+       01  TC-404                 PIC  9(03) VALUE 404.
+       01  TC-409                 PIC  9(03) VALUE 409.
+       01  TC-500                 PIC  9(03) VALUE 500.
+
+       01  TC-INSERTED            PIC  X(16) VALUE 'Record Inserted '.
+       01  TC-UPDATED             PIC  X(16) VALUE 'Record Updated  '.
+       01  TC-DELETED             PIC  X(16) VALUE 'Record Deleted  '.
+       01  TC-SELECTED            PIC  X(16) VALUE 'Record Selected '.
+       01  TC-DUPLICATE           PIC  X(16) VALUE 'Duplicate Record'.
+       01  TC-NOTFOUND            PIC  X(16) VALUE 'Record not found'.
+       01  TC-INVALID             PIC  X(16) VALUE 'Invalid Request '.
+       01  TC-ERROR               PIC  X(16) VALUE 'Request Failed  '.
+
+       01  TC-OUTPUT.
+           02  TC-RETURN-CODE     PIC  9(03) VALUE ZEROES.
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  TC-RESPONSE        PIC  X(76) VALUE SPACES.
+           02  TC-MESSAGE         PIC  X(80) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * End   - 3270 resources                                        * 00234500
+      ***************************************************************** 00234600
+
+      ***************************************************************** 00234400
+      * Start CICSDEMO file resources                                 * 00234500
+      ***************************************************************** 00234600
+       01  FC-FCT                 PIC  X(08) VALUE 'CICSRZR '.          00232300
+       01  FC-RESPONSE            PIC S9(08) COMP VALUE ZEROES.         00232000
+       01  FC-LENGTH              PIC S9(04) COMP VALUE 80.             00232000
+                                                                        00232100
+       01  FC-RECORD.                                                   00232200
+           02  FC-KEY             PIC  9(05).                           00232300
+           02  FC-MESSAGE         PIC  X(75) VALUE SPACES.
+                                                                        00308500
+      ***************************************************************** 00234400
+      * End   CICSDEMO file resources                                 * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+
+       LINKAGE SECTION.                                                 00233900
+       01  DFHCOMMAREA            PIC  X(01).                           00234000
+                                                                        00234100
+                                                                        00234100
+       PROCEDURE DIVISION.                                              00234200
+                                                                        00234300
+      ***************************************************************** 00234400
+      * Main process.                                                 * 00234500
+      ***************************************************************** 00234600
+           PERFORM 0000-ASSIGN          THRU 0000-EXIT.                 00234700
+           PERFORM 0100-RECEIVE         THRU 0100-EXIT.                 00234700
+           PERFORM 0200-FILE-ACCESS     THRU 0200-EXIT.                 00234700
+           PERFORM 0300-SEND            THRU 0300-EXIT.
+           PERFORM 9000-RETURN          THRU 9000-EXIT.                 00234900
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Assign CICS resources                                         * 00237000
+      ***************************************************************** 00238000
+       0000-ASSIGN.                                                     00239000
+           EXEC CICS ASSIGN
+                APPLID   (APPLID)
+           END-EXEC.
+
+       0000-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Receive request.                                              * 00237000
+      ***************************************************************** 00238000
+       0100-RECEIVE.                                                    00239000
+           MOVE LENGTH OF TC-INPUT        TO TC-LENGTH.
+
+           EXEC CICS RECEIVE                                            12730025
+                INTO  (TC-INPUT)                                        12740025
+                LENGTH(TC-LENGTH)                                       12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+           IF  TC-LENGTH GREATER THAN EIGHTY
+               MOVE EIGHTY  TO TC-LENGTH.
+
+           UNSTRING TC-INPUT(1:TC-LENGTH)
+               DELIMITED BY ALL ','
+               INTO TC-TRANID
+                    TC-COMMAND
+                    THE-KEY
+                    THE-MESSAGE.
+                                                                        12870000
+       0100-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Process VSAM file request.                                    * 00237000
+      ***************************************************************** 00238000
+       0200-FILE-ACCESS.                                                00239000
+           MOVE TC-400                    TO TC-RETURN-CODE
+           MOVE TC-INVALID                TO TC-RESPONSE.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-CREATE
+               PERFORM 0210-CREATE      THRU 0210-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-READ
+               PERFORM 0220-READ        THRU 0220-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-UPDATE
+               PERFORM 0230-UPDATE      THRU 0230-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-DELETE
+               PERFORM 0240-DELETE      THRU 0240-EXIT.
+                                                                        00235000
+       0200-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Create VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0210-CREATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE THE-KEY                   TO FC-KEY.
+           MOVE THE-MESSAGE               TO FC-MESSAGE.
+
+           EXEC CICS WRITE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-INSERTED           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(DUPREC)
+               MOVE TC-409                TO TC-RETURN-CODE
+               MOVE TC-DUPLICATE          TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(DUPREC)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0210-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Read   VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0220-READ.                                                       00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE THE-KEY                   TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-SELECTED           TO TC-RESPONSE
+               MOVE FC-RECORD             TO TC-MESSAGE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0220-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Read for update)                          * 00237000
+      ***************************************************************** 00238000
+       0230-UPDATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE THE-KEY                   TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+                UPDATE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               PERFORM 0231-REWRITE     THRU 0231-EXIT.
+
+       0230-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Rewrite)                                  * 00237000
+      ***************************************************************** 00238000
+       0231-REWRITE.                                                    00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE THE-MESSAGE               TO FC-MESSAGE.
+
+           EXEC CICS REWRITE
+                FILE  (FC-FCT)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-UPDATED            TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0231-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Delete VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0240-DELETE.                                                     00239000
+           MOVE THE-KEY                   TO FC-KEY.
+
+           EXEC CICS DELETE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-DELETED            TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0240-EXIT.                                                       00239000
+           EXIT.
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Send response.                                                * 00314800
+      ***************************************************************** 00314900
+       0300-SEND.                                                       00315000
+           MOVE LENGTH OF TC-OUTPUT       TO TC-LENGTH.
+
+           EXEC CICS SEND                                               00315200
+                FROM  (TC-OUTPUT)
+                LENGTH(TC-LENGTH)
+                ERASE
+                NOHANDLE
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       0300-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Return to CICS                                                * 00314800
+      ***************************************************************** 00314900
+       9000-RETURN.                                                     00315000
+                                                                        00315100
+           EXEC CICS RETURN                                             00315200
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       9000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
