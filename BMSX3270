@@ -1,0 +1,504 @@
+       CBL CICS("SP")                                                   00010000
+       IDENTIFICATION DIVISION.                                         00020000
+       PROGRAM-ID. BMSX3270.                                            00030000
+      ***************************************************************** 00040000
+      *                                                               * 00050000
+      * Authors:  Randy Frerking and Rich Jackson                     * 00062000
+      *           Walmart Technology                                  * 00062000
+      *                                                               * 00050000
+      * This program executes as a terminal transaction to perform    * 00062000
+      * Create, Read, Update, Delete (CRUD) requests.                 * 00063000
+      *                                                               * 00066000
+      * This program performs both presentation logic (PL) and        * 00063000
+      * business logic (BL) using Basic Mapping Support (BMS).        * 00063000
+      *                                                               * 00066000
+      * Date       Name    Description                                * 00067000
+      * --------- ------- ------------------------------------------- * 00068000
+      *                                                               * 00069000
+      * 2016/09/11 Randy   Create base code                           * 00070000
+      *                                                               * 00069000
+      ***************************************************************** 00071600
+       ENVIRONMENT DIVISION.                                            00071700
+       DATA DIVISION.                                                   00071800
+       WORKING-STORAGE SECTION.                                         00071900
+                                                                        00072000
+      ***************************************************************** 00073000
+      * Start - Dynamic Storage (DFHEISTG)                            * 00074000
+      ***************************************************************** 00075000
+       01  EDGEMAP                PIC  X(08) VALUE 'EDGEMAP '.          00077000
+       01  APPLID                 PIC  X(08) VALUE SPACES.              00077000
+       01  START-CODE             PIC  X(02) VALUE SPACES.
+       01  EIGHTY                 PIC S9(04) COMP  VALUE 80.            00079000
+
+      ***************************************************************** 00234400
+      * Start - 3270 terminal resources                               * 00234500
+      ***************************************************************** 00234600
+       01  TC-LENGTH              PIC S9(04) VALUE ZEROES COMP.
+
+       01  TC-200                 PIC  9(03) VALUE 200.
+       01  TC-400                 PIC  9(03) VALUE 400.
+       01  TC-404                 PIC  9(03) VALUE 404.
+       01  TC-409                 PIC  9(03) VALUE 409.
+       01  TC-500                 PIC  9(03) VALUE 500.
+
+       01  TC-SELECTED            PIC  X(16) VALUE 'Record Selected '.
+       01  TC-INSERTED            PIC  X(16) VALUE 'Record Inserted '.
+       01  TC-UPDATED             PIC  X(16) VALUE 'Record Updated  '.
+       01  TC-DELETED             PIC  X(16) VALUE 'Record Deleted  '.
+       01  TC-DUPLICATE           PIC  X(16) VALUE 'Duplicate Record'.
+       01  TC-NOTFOUND            PIC  X(16) VALUE 'Record Not Found'.
+       01  TC-INVALID             PIC  X(16) VALUE 'Invalid Request '.
+       01  TC-ERROR               PIC  X(16) VALUE 'Request Failed  '.
+
+       01  TC-RESPONSE.
+           05  TC-RETURN-CODE     PIC  9(03) VALUE ZEROES.
+           05  FILLER             PIC  X(01) VALUE '-'.
+           05  TC-RETURN-TEXT     PIC  X(56) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * End   - 3270 terminal resources                               * 00234500
+      ***************************************************************** 00234600
+
+      ***************************************************************** 00234400
+      * Start - BMS language structure.                               * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+       COPY EDGEMAP.
+
+      ***************************************************************** 00234400
+      * End   - BMS language structure.                               * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+      ***************************************************************** 00234400
+      * Start - EDGEDEMO file resources                               * 00234500
+      ***************************************************************** 00234600
+       01  FC-FCT                 PIC  X(08) VALUE 'CICSBMS '.          00232300
+       01  FC-RESPONSE            PIC S9(08) COMP VALUE ZEROES.         00232000
+       01  FC-LENGTH              PIC S9(04) COMP VALUE 512.            00232000
+                                                                        00232100
+       01  FC-RECORD.                                                   00232200
+           02  FC-KEY             PIC  9(05) VALUE ZEROES.              00232300
+           02  FILLER REDEFINES FC-KEY.
+               05  FC-Account     PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-FirstName       PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-LastName        PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-StreetNumber    PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-StreetName      PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-City            PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-State           PIC  X(02).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-ZipCode         PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-Comment         PIC  X(60).
+           02  FILLER             PIC  X(88) VALUE SPACES.
+                                                                        00308500
+      ***************************************************************** 00234400
+      * End   - EDGEDEMO file resources                               * 00234500
+      ***************************************************************** 00234600
+                                                                        00233800
+
+      ***************************************************************** 00073000
+      * End   - Dynamic Storage (DFHEISTG)                            * 00074000
+      ***************************************************************** 00075000
+
+       COPY DFHAID.
+
+      ***************************************************************** 00073000
+      * Start - Linkage Section                                       * 00074000
+      ***************************************************************** 00075000
+       LINKAGE SECTION.                                                 00233900
+       01  DFHCOMMAREA.                                                 00234000
+           05  CA-Account         PIC  9(05).
+                                                                        00234100
+      ***************************************************************** 00073000
+      * End   - Linkage Section                                       * 00074000
+      ***************************************************************** 00073000
+                                                                        00234100
+       PROCEDURE DIVISION.                                              00234200
+                                                                        00234300
+      ***************************************************************** 00234400
+      * Main process.                                                 * 00234500
+      ***************************************************************** 00234600
+           PERFORM 0000-ASSIGN            THRU 0000-EXIT.               00234700
+
+           IF  EIBCALEN   EQUAL ZEROES
+               PERFORM 0100-SEND-MAP      THRU 0100-EXIT
+               PERFORM 9000-RETURN        THRU 9000-EXIT.
+
+           PERFORM 0200-RECEIVE-MAP       THRU 0200-EXIT.               00234700
+
+           PERFORM 0300-FILE-ACCESS       THRU 0300-EXIT.               00234700
+
+           PERFORM 0400-SEND-MAP          THRU 0400-EXIT.
+           PERFORM 9100-TRANSID           THRU 9100-EXIT.
+
+      ***************************************************************** 00236000
+      * Assign CICS resources                                         * 00237000
+      ***************************************************************** 00238000
+       0000-ASSIGN.                                                     00239000
+           EXEC CICS ASSIGN
+                APPLID   (APPLID)
+           END-EXEC.
+
+       0000-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Send initial MAP.                                             * 00237000
+      ***************************************************************** 00238000
+       0100-SEND-MAP.                                                   00239000
+
+           EXEC CICS SEND                                               12730025
+                MAP   (EDGEMAP)                                         12740025
+                MAPONLY                                                 12740025
+                ERASE                                                   12740025
+                FREEKB                                                  12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+           PERFORM 9100-TRANSID           THRU 9100-EXIT.
+
+       0100-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Receive request.                                              * 00237000
+      ***************************************************************** 00238000
+       0200-RECEIVE-MAP.                                                00239000
+           EXEC CICS RECEIVE                                            12730025
+                MAP(EDGEMAP)                                            12740025
+                INTO(EDGEMAPI)                                          12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+       0200-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Process VSAM file request.                                    * 00237000
+      ***************************************************************** 00238000
+       0300-FILE-ACCESS.                                                00239000
+           MOVE TC-400                    TO TC-RETURN-CODE.
+           MOVE TC-INVALID                TO TC-RETURN-TEXT.
+           MOVE TC-RESPONSE               TO ResponseO.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF1
+               PERFORM 0310-READ        THRU 0310-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF2
+               PERFORM 0320-CREATE      THRU 0320-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF3
+               PERFORM 0330-UPDATE      THRU 0330-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF4
+               PERFORM 0340-DELETE      THRU 0340-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHCLEAR
+               PERFORM 8000-CLEAR       THRU 8000-EXIT
+               PERFORM 9000-RETURN      THRU 9000-RETURN.
+                                                                        00235000
+           IF  TC-RETURN-CODE EQUAL TC-400
+               PERFORM 9200-ERASE       THRU 9200-EXIT.
+
+       0300-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Read   VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0310-READ.                                                       00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE FC-ACCOUNT            TO AccountI
+               MOVE FC-FIRSTNAME          TO FNameI
+               MOVE FC-LASTNAME           TO LNameI
+               MOVE FC-STREETNUMBER       TO SNumberI
+               MOVE FC-STREETNAME         TO SNameI
+               MOVE FC-CITY               TO CityI
+               MOVE FC-STATE              TO StateI
+               MOVE FC-ZIPCODE            TO ZipCodeI
+               MOVE FC-Comment            TO CommentI
+
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-SELECTED           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               PERFORM 9200-ERASE       THRU 9200-EXIT
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               PERFORM 9200-ERASE       THRU 9200-EXIT
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+       0310-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Create VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0320-CREATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           IF  AccountI     NOT EQUAL LOW-VALUES
+               MOVE AccountI                  TO FC-Account.
+           IF  FNameI       NOT EQUAL LOW-VALUES
+               MOVE FNameI                    TO FC-FirstName.
+           IF  LNameI       NOT EQUAL LOW-VALUES
+               MOVE LNameI                    TO FC-LastName.
+           IF  SNumberI     NOT EQUAL LOW-VALUES
+               MOVE SNumberI                  TO FC-StreetNumber.
+           IF  SNameI       NOT EQUAL LOW-VALUES
+               MOVE SNameI                    TO FC-StreetName.
+           IF  CityI        NOT EQUAL LOW-VALUES
+               MOVE CityI                     TO FC-City.
+           IF  StateI       NOT EQUAL LOW-VALUES
+               MOVE StateI                    TO FC-State.
+           IF  ZipCodeI     NOT EQUAL LOW-VALUES
+               MOVE ZipCodeI                  TO FC-ZipCode.
+           IF  CommentI     NOT EQUAL LOW-VALUES
+               MOVE CommentI                  TO FC-Comment.
+
+           EXEC CICS WRITE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-INSERTED           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(DUPREC)
+               MOVE TC-409                TO TC-RETURN-CODE
+               MOVE TC-DUPLICATE          TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(DUPREC)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0320-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Read for update)                          * 00237000
+      ***************************************************************** 00238000
+       0330-UPDATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+                UPDATE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               PERFORM 0331-REWRITE     THRU 0331-EXIT.
+
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0330-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Rewrite)                                  * 00237000
+      ***************************************************************** 00238000
+       0331-REWRITE.                                                    00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+
+           IF  FNameI         NOT EQUAL LOW-VALUES
+               MOVE FNameI                    TO FC-FirstName.
+
+           IF  LNameI         NOT EQUAL LOW-VALUES
+               MOVE LNameI                    TO FC-LastName.
+
+           IF  SNumberI       NOT EQUAL LOW-VALUES
+               MOVE SNumberI                  TO FC-StreetNumber.
+
+           IF  SNameI         NOT EQUAL LOW-VALUES
+               MOVE SNameI                    TO FC-StreetName.
+
+           IF  CityI          NOT EQUAL LOW-VALUES
+               MOVE CityI                     TO FC-City.
+
+           IF  StateI         NOT EQUAL LOW-VALUES
+               MOVE StateI                    TO FC-State.
+
+           IF  ZipCodeI       NOT EQUAL LOW-VALUES
+               MOVE ZipCodeI                  TO FC-ZipCode.
+
+           IF  CommentI       NOT EQUAL LOW-VALUES
+               MOVE CommentI                  TO FC-Comment.
+
+           EXEC CICS REWRITE
+                FILE  (FC-FCT)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-UPDATED            TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0331-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Delete VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0340-DELETE.                                                     00239000
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS DELETE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-DELETED            TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0340-EXIT.                                                       00239000
+           EXIT.
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Send response.                                                * 00314800
+      ***************************************************************** 00314900
+       0400-SEND-MAP.                                                   00315000
+
+           EXEC CICS SEND                                               00315200
+                MAP   (EDGEMAP)
+                FROM  (EDGEMAPO)
+                ERASE
+                NOHANDLE
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       0400-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Clear screen                                                  * 00314800
+      ***************************************************************** 00314900
+       8000-CLEAR.                                                      00315000
+                                                                        00315100
+           EXEC CICS SEND
+                FROM(EIBTRNID)
+                LENGTH(0)
+                ERASE
+                NOHANDLE
+           END-EXEC.
+
+       8000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Return to CICS                                                * 00314800
+      ***************************************************************** 00314900
+       9000-RETURN.                                                     00315000
+                                                                        00315100
+           EXEC CICS RETURN                                             00315200
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       9000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Return to CICS with next TRANSID.                             * 00314800
+      ***************************************************************** 00314900
+       9100-TRANSID.                                                    00315000
+                                                                        00315100
+           EXEC CICS RETURN
+                TRANSID (EIBTRNID)
+                COMMAREA(FC-KEY)
+                LENGTH  (LENGTH OF FC-KEY)
+                NOHANDLE
+           END-EXEC.
+                                                                        00315400
+       9100-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Erase screen                                                  * 00314800
+      ***************************************************************** 00314900
+       9200-ERASE.                                                      00315000
+           MOVE LOW-VALUES                TO FNameO.
+           MOVE LOW-VALUES                TO LNameO.
+           MOVE LOW-VALUES                TO SNumberO.
+           MOVE LOW-VALUES                TO SNameO.
+           MOVE LOW-VALUES                TO CityO.
+           MOVE LOW-VALUES                TO StateO.
+           MOVE LOW-VALUES                TO ZipCodeO.
+           MOVE LOW-VALUES                TO CommentO.
+
+       9200-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
