@@ -1,0 +1,474 @@
+       CBL CICS("SP")                                                   00010000
+       IDENTIFICATION DIVISION.                                         00020000
+       PROGRAM-ID. TSQXREST.                                            00030000
+      ***************************************************************** 00040000
+      *                                                               * 00050000
+      * Authors:  Randy Frerking and Rich Jackson                     * 00062000
+      *           Walmart Technology                                  * 00062000
+      *                                                               * 00050000
+      * This program executes as a terminal transaction to perform    * 00062000
+      * Create, Read, Update, Delete (CRUD) requests.                 * 00063000
+      *                                                               * 00066000
+      * Date       Name    Description                                * 00067000
+      * --------- ------- ------------------------------------------- * 00068000
+      *                                                               * 00069000
+      * 2016/02/04 Randy   Create base code                           * 00070000
+RF01  * 2016/02/07 Randy   REST enable using CICS API and resources.  *
+      * 2018/04/09 Randy   Replace VSAM with TSQ for non-Walmart demo.* 00070000
+      ***************************************************************** 00071600
+       ENVIRONMENT DIVISION.                                            00071700
+       DATA DIVISION.                                                   00071800
+       WORKING-STORAGE SECTION.                                         00071900
+                                                                        00072000
+      ***************************************************************** 00073000
+      * DEFINE LOCAL VARIABLES                                        * 00074000
+      ***************************************************************** 00075000
+       01  APPLID                 PIC  X(08) VALUE SPACES.              00077000
+RF01   01  START-CODE             PIC  X(02) VALUE SPACES.
+       01  EIGHTY                 PIC S9(04) COMP  VALUE 80.            00079000
+       01  ONE                    PIC S9(04) COMP  VALUE 1.             00079000
+
+       01  THE-KEY                PIC  9(05) VALUE ZEROES.
+       01  THE-MESSAGE            PIC  X(75) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * Start - 3270 resources                                        * 00234500
+      ***************************************************************** 00234600
+       01  TC-LENGTH              PIC S9(04) VALUE ZEROES COMP.
+       01  TC-INPUT               PIC  X(80) VALUE SPACES.
+       01  TC-TRANID              PIC  X(04) VALUE SPACES.
+       01  TC-COMMAND             PIC  X(06) VALUE SPACES.
+
+       01  TC-CREATE              PIC  X(06) VALUE 'CREATE'.
+       01  TC-READ                PIC  X(06) VALUE 'READ  '.
+       01  TC-UPDATE              PIC  X(06) VALUE 'UPDATE'.
+       01  TC-DELETE              PIC  X(06) VALUE 'DELETE'.
+
+       01  TC-200                 PIC  9(03) VALUE 200.
+       01  TC-400                 PIC  9(03) VALUE 400.
+       01  TC-404                 PIC  9(03) VALUE 404.
+       01  TC-409                 PIC  9(03) VALUE 409.
+       01  TC-500                 PIC  9(03) VALUE 500.
+
+       01  TC-INSERTED            PIC  X(16) VALUE 'Record Inserted '.
+       01  TC-UPDATED             PIC  X(16) VALUE 'Record Updated  '.
+       01  TC-DELETED             PIC  X(16) VALUE 'Record Deleted  '.
+       01  TC-SELECTED            PIC  X(16) VALUE 'Record Selected '.
+       01  TC-DUPLICATE           PIC  X(16) VALUE 'Duplicate Record'.
+       01  TC-NOTFOUND            PIC  X(16) VALUE 'Record not found'.
+       01  TC-INVALID             PIC  X(16) VALUE 'Invalid Request '.
+       01  TC-ERROR               PIC  X(16) VALUE 'Request Failed  '.
+
+       01  TC-OUTPUT.
+           02  TC-RETURN-CODE     PIC  9(03) VALUE ZEROES.
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  TC-RESPONSE        PIC  X(76) VALUE SPACES.
+           02  TC-MESSAGE         PIC  X(80) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * End   - 3270 resources                                        * 00234500
+      ***************************************************************** 00234600
+
+      ***************************************************************** 00234400
+      * Start TSQ-DEMO TSQ  resources                                 * 00234500
+      ***************************************************************** 00234600
+       01  TS-QNAME.
+           02  TS-TRANID          PIC  X(04) VALUE SPACES.
+           02  FILLER             PIC  X(01) VALUE '-'.
+           02  TS-KEY             PIC  9(05) VALUE ZEROES.
+           02  FILLER             PIC  X(06) VALUE SPACES.
+
+       01  TS-RESPONSE            PIC S9(08) COMP VALUE ZEROES.         00232000
+       01  TS-LENGTH              PIC S9(04) COMP VALUE 80.             00232000
+       01  TS-ITEM                PIC S9(04) COMP VALUE 0.              00232000
+                                                                        00232100
+       01  TS-RECORD.                                                   00232200
+           02  TS-MESSAGE         PIC  X(75) VALUE SPACES.
+                                                                        00308500
+      ***************************************************************** 00234400
+      * End   TSQ-DEMO TSQ  resources                                 * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+                                                                        00233800
+RF01  ***************************************************************** 00234400
+RF01  * Start HTTP/REST resources                                     * 00234500
+RF01  ***************************************************************** 00234600
+RF01   01  WEB-SEND-LENGTH        PIC S9(08) COMP VALUE ZEROES.         02040099
+RF01   01  WEB-RECEIVE-LENGTH     PIC S9(08) COMP VALUE 75.             02050099
+RF01                                                                    02140099
+RF01   01  WEB-RESPONSE           PIC S9(08) COMP VALUE ZEROES.         02200099
+RF01   01  WEB-PATH-LENGTH        PIC S9(08) COMP VALUE 80.             02250099
+RF01   01  WEB-HTTPMETHOD-LENGTH  PIC S9(08) COMP VALUE 10.             02250099
+RF01   01  WEB-QUERYSTRING-LENGTH PIC S9(08) COMP VALUE 20.             02250099
+RF01                                                                    02300099
+RF01   01  WEB-QUERYSTRING        PIC  X(20) VALUE SPACES.              02310099
+RF01   01  WEB-HTTPMETHOD         PIC  X(10) VALUE SPACES.              02310099
+RF01   01  WEB-HTTP-PUT           PIC  X(10) VALUE 'PUT'.               02320099
+RF01   01  WEB-HTTP-GET           PIC  X(10) VALUE 'GET'.               02330099
+RF01   01  WEB-HTTP-POST          PIC  X(10) VALUE 'POST'.              02340099
+RF01   01  WEB-HTTP-DELETE        PIC  X(10) VALUE 'DELETE'.            02350099
+RF01                                                                    02360099
+RF01   01  WEB-MEDIA-TYPE         PIC  X(56) VALUE LOW-VALUES.          01910099
+RF01   01  WEB-PATH               PIC  X(80) VALUE LOW-VALUES.          02400099
+RF01                                                                    01990099
+RF01   01  HTTP-TEXT-PLAIN        PIC  X(56) VALUE 'text/plain'.
+RF01   01  HTTP-STATUS-TEXT       PIC  X(80) VALUE SPACES.              01511099
+RF01   01  HTTP-MESSAGE           PIC  X(80) VALUE SPACES.              01511099
+RF01                                                                    01990099
+RF01   01  HTTP-STATUS-CODE       PIC S9(04) COMP VALUE ZEROES.         01380099
+RF01   01  HTTP-STATUS-LENGTH     PIC S9(08) COMP VALUE ZEROES.         01480099
+RF01   01  HTTP-MESSAGE-LENGTH    PIC S9(08) COMP VALUE ZEROES.         01480099
+RF01   01  HTTP-SEND-ACTION       PIC S9(08) COMP VALUE ZEROES.         02130099
+RF01
+RF01   01  HEADER-ACAO.
+RF01       02  FILLER             PIC  X(16) VALUE 'Access-Control-A'.
+RF01       02  FILLER             PIC  X(11) VALUE 'llow-Origin'.
+RF01                                                                    02360099
+RF01   01  HEADER-ACAO-LENGTH     PIC S9(08) COMP VALUE 27.             02360099
+RF01                                                                    02360099
+RF01   01  VALUE-ACAO             PIC  X(01) VALUE '*'.                 02360099
+RF01   01  VALUE-ACAO-LENGTH      PIC S9(08) COMP VALUE 01.             02360099
+RF01                                                                    02360099
+RF01   01  FILLER.                                                      01844610
+RF01     02  QS-FIELD             PIC  X(10).                           01844610
+RF01     02  QS-KEY               PIC  9(05).                           01844710
+RF01                                                                    01900000
+RF01  ***************************************************************** 00234400
+RF01  * End   HTTP/REST resources                                     * 00234500
+RF01  ***************************************************************** 00234600
+
+       LINKAGE SECTION.                                                 00233900
+       01  DFHCOMMAREA            PIC  X(01).                           00234000
+                                                                        00234100
+                                                                        00234100
+       PROCEDURE DIVISION.                                              00234200
+                                                                        00234300
+      ***************************************************************** 00234400
+      * Main process.                                                 * 00234500
+      ***************************************************************** 00234600
+           PERFORM 0000-ASSIGN          THRU 0000-EXIT.                 00234700
+
+RF01       IF  START-CODE EQUAL 'TD'
+               PERFORM 0100-RECEIVE     THRU 0100-EXIT                  00234700
+RF01       ELSE
+RF01           PERFORM 0110-WEB-RECEIVE THRU 0110-EXIT.                 00234700
+
+           PERFORM 0200-FILE-ACCESS     THRU 0200-EXIT.                 00234700
+
+RF01       IF  START-CODE EQUAL 'TD'
+               PERFORM 0300-SEND        THRU 0300-EXIT
+RF01       ELSE
+RF01           PERFORM 0310-WEB-SEND    THRU 0310-EXIT.
+
+           PERFORM 9000-RETURN          THRU 9000-EXIT.                 00234900
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Assign CICS resources                                         * 00237000
+      ***************************************************************** 00238000
+       0000-ASSIGN.                                                     00239000
+           EXEC CICS ASSIGN
+                APPLID   (APPLID)
+RF01            STARTCODE(START-CODE)
+           END-EXEC.
+
+       0000-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Receive request.                                              * 00237000
+      ***************************************************************** 00238000
+       0100-RECEIVE.                                                    00239000
+           MOVE LENGTH OF TC-INPUT        TO TC-LENGTH.
+
+           EXEC CICS RECEIVE                                            12730025
+                INTO  (TC-INPUT)                                        12740025
+                LENGTH(TC-LENGTH)                                       12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+           IF  TC-LENGTH GREATER THAN EIGHTY
+               MOVE EIGHTY  TO TC-LENGTH.
+
+           UNSTRING TC-INPUT(1:TC-LENGTH)
+               DELIMITED BY ALL ','
+               INTO TC-TRANID
+                    TC-COMMAND
+                    THE-KEY
+                    THE-MESSAGE.
+                                                                        12870000
+       0100-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+RF01  ***************************************************************** 00236000
+RF01  * Receive request (HTTP/REST)                                   * 00237000
+RF01  ***************************************************************** 00238000
+RF01   0110-WEB-RECEIVE.                                                00239000
+RF01       EXEC CICS WEB EXTRACT                                        04002099
+RF01            PATH        (WEB-PATH)                                  04010099
+RF01            PATHLENGTH  (WEB-PATH-LENGTH)                           04020099
+RF01            HTTPMETHOD  (WEB-HTTPMETHOD)                            04006099
+RF01            METHODLENGTH(WEB-HTTPMETHOD-LENGTH)                     04006099
+RF01            QUERYSTRING (WEB-QUERYSTRING)                           04006099
+RF01            QUERYSTRLEN (WEB-QUERYSTRING-LENGTH)                    04006099
+RF01            NOHANDLE                                                04070099
+RF01       END-EXEC.                                                    04080099
+RF01                                                                    04001399
+RF01       IF  WEB-QUERYSTRING-LENGTH GREATER THAN ZERO
+RF01           UNSTRING WEB-QUERYSTRING(1:WEB-QUERYSTRING-LENGTH)       04281010
+RF01               DELIMITED BY '='                                     04290000
+RF01               INTO      QS-FIELD                                   04300010
+RF01                         QS-KEY                                     04300010
+RF01                                                                    04370000
+RF01           MOVE QS-KEY     TO THE-KEY.                              04090099
+RF01                                                                    04001399
+RF01                                                                    04090099
+RF01       IF  WEB-HTTPMETHOD EQUAL WEB-HTTP-POST                       04460099
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-PUT                        04470099
+RF01                                                                    04480099
+RF01           EXEC CICS WEB RECEIVE                                    00990099
+RF01                INTO     (THE-MESSAGE)                              00990099
+RF01                LENGTH   (WEB-RECEIVE-LENGTH)                       00990099
+RF01                MAXLENGTH(WEB-RECEIVE-LENGTH)                       00990099
+RF01                MEDIATYPE(WEB-MEDIA-TYPE)                           00990099
+RF01                RESP     (WEB-RESPONSE)                             10990099
+RF01                SRVCONVERT                                          20990099
+RF01                NOHANDLE                                            00990099
+RF01           END-EXEC.                                                00990099
+RF01                                                                    04760099
+RF01       INSPECT THE-MESSAGE                                          04760099
+RF01           REPLACING ALL LOW-VALUES BY SPACE.                       04760099
+RF01                                                                    04760099
+RF01       INSPECT THE-MESSAGE                                          04760099
+RF01           REPLACING ALL X'25' BY SPACE.                            04760099
+RF01                                                                    04760099
+RF01       INSPECT THE-MESSAGE                                          04760099
+RF01           REPLACING ALL X'0D' BY SPACE.                            04760099
+RF01                                                                    04760099
+RF01       INSPECT THE-MESSAGE                                          04760099
+RF01           REPLACING ALL X'0A' BY SPACE.                            04760099
+RF01                                                                    04760099
+RF01   0110-EXIT.                                                       00239000
+RF01       EXIT.                                                        04090099
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Process TSQ  item request.                                    * 00237000
+      ***************************************************************** 00238000
+       0200-FILE-ACCESS.                                                00239000
+           MOVE TC-400                    TO TC-RETURN-CODE
+           MOVE TC-INVALID                TO TC-RESPONSE.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-CREATE
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-POST
+               PERFORM 0210-CREATE      THRU 0210-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-READ
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-GET
+               PERFORM 0220-READ        THRU 0220-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-UPDATE
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-PUT
+               PERFORM 0230-UPDATE      THRU 0230-EXIT.
+                                                                        00235000
+           IF  TC-COMMAND     EQUAL TC-DELETE
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-DELETE
+               PERFORM 0240-DELETE      THRU 0240-EXIT.
+                                                                        00235000
+       0200-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Create TSQ  record.                                           * 00237000
+      ***************************************************************** 00238000
+       0210-CREATE.                                                     00239000
+           MOVE LENGTH OF TS-RECORD       TO TS-LENGTH.
+           MOVE THE-MESSAGE               TO TS-MESSAGE.
+           MOVE THE-KEY                   TO TS-KEY.
+           MOVE EIBTRNID                  TO TS-TRANID.
+           MOVE ONE                       TO TS-ITEM.
+
+           EXEC CICS WRITEQ TS
+                QNAME (TS-QNAME)
+                ITEM  (TS-ITEM)
+                FROM  (TS-RECORD)
+                LENGTH(TS-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+           AND TS-ITEM EQUAL ONE
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-INSERTED           TO TC-RESPONSE.
+                                                                        00110000
+           IF  TS-ITEM NOT EQUAL ONE
+               MOVE TC-409                TO TC-RETURN-CODE
+               MOVE TC-DUPLICATE          TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NORMAL)
+           AND TS-ITEM NOT EQUAL ONE
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0210-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Read   TSQ  record.                                           * 00237000
+      ***************************************************************** 00238000
+       0220-READ.                                                       00239000
+           MOVE LENGTH OF TS-RECORD       TO TS-LENGTH.
+           MOVE THE-KEY                   TO TS-KEY.
+           MOVE EIBTRNID                  TO TS-TRANID.
+           MOVE ONE                       TO TS-ITEM.
+
+           EXEC CICS READQ TS
+                QNAME (TS-QNAME)
+                ITEM  (TS-ITEM)
+                INTO  (TS-RECORD)
+                LENGTH(TS-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-SELECTED           TO TC-RESPONSE
+               MOVE TS-RECORD             TO TC-MESSAGE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(QIDERR)
+           OR  EIBRESP EQUAL DFHRESP(ITEMERR)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(QIDERR)
+           AND EIBRESP NOT EQUAL DFHRESP(ITEMERR)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0220-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update TSQ  record.                                           * 00237000
+      ***************************************************************** 00238000
+       0230-UPDATE.                                                     00239000
+           MOVE LENGTH OF TS-RECORD       TO TS-LENGTH.
+           MOVE THE-KEY                   TO TS-KEY.
+           MOVE EIBTRNID                  TO TS-TRANID.
+           MOVE THE-MESSAGE               TO TS-MESSAGE.
+           MOVE ONE                       TO TS-ITEM.
+
+           EXEC CICS WRITEQ TS
+                QNAME (TS-QNAME)
+                ITEM  (TS-ITEM)
+                FROM  (TS-RECORD)
+                LENGTH(TS-LENGTH)
+                NOHANDLE
+                REWRITE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-UPDATED            TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(QIDERR)
+           OR  EIBRESP EQUAL DFHRESP(ITEMERR)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(QIDERR)
+           AND EIBRESP NOT EQUAL DFHRESP(ITEMERR)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0230-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Delete TSQ  record.                                           * 00237000
+      ***************************************************************** 00238000
+       0240-DELETE.                                                     00239000
+           MOVE THE-KEY                   TO TS-KEY.
+           MOVE EIBTRNID                  TO TS-TRANID.
+
+           EXEC CICS DELETEQ TS
+                QNAME (TS-QNAME)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-DELETED            TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(QIDERR)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RESPONSE.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+                                                                        00110000
+       0240-EXIT.                                                       00239000
+           EXIT.
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Send response.                                                * 00314800
+      ***************************************************************** 00314900
+       0300-SEND.                                                       00315000
+           MOVE LENGTH OF TC-OUTPUT       TO TC-LENGTH.
+
+           EXEC CICS SEND                                               00315200
+                FROM  (TC-OUTPUT)
+                LENGTH(TC-LENGTH)
+                ERASE
+                NOHANDLE
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       0300-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+RF01  ***************************************************************** 00314700
+RF01  * Send response (HTTP/REST)                                     * 00314800
+RF01  ***************************************************************** 00314900
+RF01   0310-WEB-SEND.                                                   00315000
+RF01       EXEC CICS WEB WRITE                                          00315400
+RF01            HTTPHEADER (HEADER-ACAO)                                00315400
+RF01            NAMELENGTH (HEADER-ACAO-LENGTH)                         00315400
+RF01            VALUE      (VALUE-ACAO)                                 00315400
+RF01            VALUELENGTH(VALUE-ACAO-LENGTH)                          00315400
+RF01            NOHANDLE                                                00315400
+RF01       END-EXEC.                                                    00315400
+RF01                                                                    00315400
+RF01       MOVE DFHVALUE(IMMEDIATE)       TO HTTP-SEND-ACTION.          14530000
+RF01       MOVE TC-RETURN-CODE            TO HTTP-STATUS-CODE.
+RF01       MOVE TC-RESPONSE               TO HTTP-STATUS-TEXT.
+RF01       MOVE EIGHTY                    TO HTTP-STATUS-LENGTH.
+RF01       MOVE TC-MESSAGE                TO HTTP-MESSAGE.
+RF01       MOVE EIGHTY                    TO HTTP-MESSAGE-LENGTH.
+RF01                                                                    14765636
+RF01       EXEC CICS WEB SEND                                           14766136
+RF01            FROM      (HTTP-MESSAGE)                                14766236
+RF01            FROMLENGTH(HTTP-MESSAGE-LENGTH)                         14766336
+RF01            STATUSCODE(HTTP-STATUS-CODE)                            14766636
+RF01            STATUSTEXT(HTTP-STATUS-TEXT)                            14766736
+RF01            STATUSLEN (HTTP-STATUS-LENGTH)                          14766836
+RF01            ACTION    (HTTP-SEND-ACTION)                            14766436
+RF01            MEDIATYPE (HTTP-TEXT-PLAIN)                             14766536
+RF01            SRVCONVERT                                              14766936
+RF01            NOHANDLE                                                14767036
+RF01       END-EXEC.                                                    14767136
+RF01                                                                    14767236
+RF01   0310-EXIT.                                                       00315500
+RF01       EXIT.                                                        00315600
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Return to CICS                                                * 00314800
+      ***************************************************************** 00314900
+       9000-RETURN.                                                     00315000
+                                                                        00315100
+           EXEC CICS RETURN                                             00315200
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       9000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
