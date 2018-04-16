@@ -1,0 +1,389 @@
+       CBL CICS("SP")                                                   00010000
+       IDENTIFICATION DIVISION.                                         00020000
+       PROGRAM-ID. TSQXCLI.                                             00030000
+      ***************************************************************** 00040000
+      *                                                               * 00050000
+      * CICS Web Client.                                              * 00060000
+      * Designed and written by Rich Jackson and Randy Frerking       * 00060000
+      *                                                               * 00061000
+      *                                                               * 00066000
+      * Date       UserID  Description                                * 00067000
+      * --------- ------- ------------------------------------------- * 00068000
+      *                                                               * 00069000
+      * 2018/04/06 J1FRERK Create base code                           * 00070000
+      *                                                               * 00069000
+      ***************************************************************** 00071600
+       ENVIRONMENT DIVISION.                                            00071700
+       DATA DIVISION.                                                   00071800
+       WORKING-STORAGE SECTION.                                         00071900
+                                                                        00072000
+      ***************************************************************** 00073000
+      * DEFINE LOCAL VARIABLES                                        * 00074000
+      ***************************************************************** 00075000
+       01  ABS-TIME               PIC S9(15) COMP-3 VALUE 0.            00233100
+       01  TWELVE                 PIC S9(02) COMP-3 VALUE 12.           00233100
+       01  TEN                    PIC S9(02) COMP-3 VALUE 10.           00233100
+       01  ONE                    PIC S9(02) COMP-3 VALUE 1.            00233100
+       01  TRAILING-SPACES        PIC S9(08) COMP   VALUE 0.            00166000
+       01  FIVE-TWELVE            PIC S9(08) COMP   VALUE 512.          00166000
+       01  TWO-FIFTY-SIX          PIC S9(08) COMP   VALUE 256.          00166000
+       01  EIGHTY                 PIC S9(04) COMP   VALUE 80.           00166000
+       01  EIGHT                  PIC S9(04) COMP   VALUE 8.            00166000
+
+       01  THE-URIMAP.
+           02  URI-TRANID         PIC  X(04).
+           02  FILLER             PIC  X(04) VALUE SPACES.
+
+       01  THE-QUERYSTRING-LENGTH PIC S9(08) COMP VALUE 0.
+       01  THE-QUERYSTRING.                                             00079000
+           02  FILLER             PIC  X(04) VALUE 'key='.
+           02  THE-KEY            PIC  9(05) VALUE ZEROES.
+                                                                        00110000
+       01  THE-MEDIA              PIC  X(56) VALUE SPACES.              00079000
+       01  TEXT-PLAIN             PIC  X(56) VALUE 'text/plain'.        00079000
+                                                                        00110000
+                                                                        00110000
+      ***************************************************************** 00234400
+      * REST  resources.                                              * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+       01  HTTP-STATUS-200        PIC S9(04) COMP VALUE 200.            00160100
+                                                                        00160300
+       01  SESSION-TOKEN          PIC S9(18) COMP VALUE ZEROES.
+       01  WEB-METHOD             PIC S9(08) COMP VALUE ZEROES.         00164700
+       01  WEB-SCHEME             PIC S9(08) COMP VALUE ZEROES.         00164700
+       01  WEB-HOST-LENGTH        PIC S9(08) COMP VALUE 120.            00164800
+       01  WEB-PORT               PIC S9(08) COMP VALUE ZEROES.         00169000
+                                                                        00180000
+       01  WEB-HTTP-PUT           PIC  X(10) VALUE 'PUT'.               00200000
+       01  WEB-HTTP-GET           PIC  X(10) VALUE 'GET'.               00200000
+       01  WEB-HTTP-POST          PIC  X(10) VALUE 'POST'.              00210000
+       01  WEB-HTTP-DELETE        PIC  X(10) VALUE 'DELETE'.            00220000
+                                                                        00230000
+       01  WEB-HOST               PIC X(120) VALUE SPACES.              00231200
+                                                                        00110000
+       01  WEB-STATUS-CODE        PIC S9(04) COMP VALUE 00.
+       01  WEB-STATUS-LENGTH      PIC S9(08) COMP VALUE 80.
+       01  WEB-STATUS-TEXT        PIC  X(80) VALUE SPACES.
+                                                                        00110000
+       01  WEB-PATH               PIC X(512) VALUE SPACES.              00231300
+       01  WEB-PATH-LENGTH        PIC S9(08) COMP VALUE 0.
+                                                                        00231500
+       01  CONVERSE-LENGTH        PIC S9(08) COMP VALUE 80.
+       01  CONVERSE-RESPONSE      PIC  X(80) VALUE SPACES.
+                                                                        00110000
+      ***************************************************************** 00234400
+      * Terminal Control input parameters.                            * 00234500
+      ***************************************************************** 00234600
+       01  TC-LENGTH              PIC S9(04) VALUE ZEROES COMP.
+       01  TC-INPUT               PIC  X(80) VALUE SPACES.
+       01  TC-TRANID              PIC  X(04) VALUE SPACES.
+       01  TC-METHOD              PIC  X(06) VALUE SPACES.
+       01  TC-KEY                 PIC  9(05) VALUE ZEROES.
+       01  TC-VALUE               PIC  X(75) VALUE SPACES.
+
+       01  TC-DISPLAY.
+           02  TC-COMMAND         PIC  X(80) VALUE SPACES.
+           02  TC-STATUS          PIC  9(04) VALUE ZEROES.
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  TC-TEXT            PIC  X(71) VALUE SPACES.
+           02  FILLER             PIC  X(04) VALUE SPACES.
+           02  TC-RESPONSE        PIC  X(80) VALUE SPACES.
+
+       COPY DFHAID.
+
+       LINKAGE SECTION.                                                 00233900
+       01  DFHCOMMAREA            PIC  X(01).                           00234000
+                                                                        00234100
+       PROCEDURE DIVISION.                                              00234200
+                                                                        00234300
+      ***************************************************************** 00234400
+      * Main process.                                                 * 00234500
+      ***************************************************************** 00234600
+           PERFORM 0100-GET-PARMS          THRU 0100-EXIT.              00234700
+           PERFORM 0200-GET-URL            THRU 0200-EXIT.              00234700
+           PERFORM 0300-WEB-OPEN           THRU 0300-EXIT.              00234700
+           PERFORM 0400-WEB-CONVERSE       THRU 0400-EXIT.              00234700
+           PERFORM 0500-WEB-CLOSE          THRU 0500-EXIT.              00234700
+           PERFORM 0900-RETURN             THRU 0900-EXIT.              00234900
+                                                                        00235000
+      ***************************************************************** 12450000
+      * Get input parameters from terminal                            * 12460000
+      ***************************************************************** 12490000
+       0100-GET-PARMS.                                                  12500000
+           MOVE LENGTH OF TC-INPUT           TO TC-LENGTH.
+
+           EXEC CICS RECEIVE INTO(TC-INPUT)                             12730025
+                LENGTH(TC-LENGTH)                                       12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+           IF  TC-LENGTH GREATER THAN EIGHTY
+               MOVE EIGHTY  TO TC-LENGTH.
+
+           UNSTRING TC-INPUT(1:TC-LENGTH)
+               DELIMITED BY ALL ','
+               INTO TC-TRANID
+                    TC-METHOD
+                    TC-KEY
+                    TC-VALUE.
+                                                                        12870000
+           MOVE TC-KEY      TO THE-KEY.
+                                                                        12870000
+       0100-EXIT.                                                       12880000
+           EXIT.                                                        12890000
+                                                                        00235000
+      ***************************************************************** 12450000
+      * Issue INQUIRE URIMAP to acquire WEB information.              * 12470000
+      ***************************************************************** 12490000
+       0200-GET-URL.                                                    12500000
+           MOVE EIBTRNID           TO URI-TRANID.
+
+           EXEC CICS INQUIRE URIMAP(THE-URIMAP)                         12730025
+                HOST  (WEB-HOST)                                        12740025
+                PORT  (WEB-PORT)                                        12750025
+                PATH  (WEB-PATH)                                        12760025
+                SCHEME(WEB-SCHEME)                                      12760025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+                                                                        12870000
+           MOVE ZEROES             TO TRAILING-SPACES.
+           INSPECT FUNCTION REVERSE(WEB-PATH)
+           TALLYING TRAILING-SPACES
+           FOR LEADING SPACES.
+
+           SUBTRACT TRAILING-SPACES FROM LENGTH OF WEB-PATH
+           GIVING WEB-PATH-LENGTH.
+                                                                        12870000
+           MOVE ZEROES             TO TRAILING-SPACES.
+           INSPECT FUNCTION REVERSE(WEB-HOST)
+           TALLYING TRAILING-SPACES
+           FOR CHARACTERS BEFORE INITIAL ':'.
+                                                                        12870000
+           SUBTRACT TRAILING-SPACES FROM LENGTH OF WEB-HOST
+           GIVING WEB-HOST-LENGTH.
+                                                                        12870000
+           SUBTRACT ONE FROM WEB-HOST-LENGTH.
+                                                                        12870000
+       0200-EXIT.                                                       12880000
+           EXIT.                                                        12890000
+                                                                        00315700
+      ***************************************************************** 00311600
+      * Open WEB connection with the application server.              * 00311700
+      ***************************************************************** 00311800
+       0300-WEB-OPEN.                                                   00311900
+           EXEC CICS WEB OPEN
+                URIMAP    (THE-URIMAP)
+                SESSTOKEN (SESSION-TOKEN)
+                NOHANDLE
+           END-EXEC.
+                                                                        00312300
+       0300-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+      ***************************************************************** 00311600
+      * Converse (WEB SEND/RECEIVE)                                   * 00311700
+      * The CONVERSE, just as an example, uses the PATH and PATHLENGTH* 00311700
+      * parameters, compared to the individual WEB SEND, WEB RECEIVE, * 00311700
+      * which uses the URIMAP parameter.                              * 00311700
+      ***************************************************************** 00311800
+       0400-WEB-CONVERSE.                                               00311900
+           IF  TC-METHOD     EQUAL 'CREATE'
+               MOVE DFHVALUE(POST)        TO WEB-METHOD.
+                                                                        00312300
+           IF  TC-METHOD     EQUAL 'READ  '
+               MOVE DFHVALUE(GET)         TO WEB-METHOD.
+                                                                        00312300
+           IF  TC-METHOD     EQUAL 'UPDATE'
+               MOVE DFHVALUE(PUT)         TO WEB-METHOD.
+                                                                        00312300
+           IF  TC-METHOD     EQUAL 'DELETE'
+               MOVE DFHVALUE(DELETE)      TO WEB-METHOD.
+                                                                        00312300
+           MOVE TEXT-PLAIN                TO THE-MEDIA.
+                                                                        00312300
+           INSPECT THE-MEDIA
+           REPLACING ALL SPACES BY LOW-VALUES.
+                                                                        00312300
+           MOVE LENGTH OF THE-QUERYSTRING TO THE-QUERYSTRING-LENGTH.
+
+           PERFORM 0410-WEB-SEND        THRU 0410-EXIT.
+           PERFORM 0420-WEB-RECEIVE     THRU 0420-EXIT.
+
+           GO TO 0400-EXIT.
+
+           IF  WEB-METHOD EQUAL DFHVALUE(POST)
+           OR  WEB-METHOD EQUAL DFHVALUE(PUT)
+               EXEC CICS WEB CONVERSE
+                    SESSTOKEN   (SESSION-TOKEN)
+                    PATH        (WEB-PATH)
+                    PATHLENGTH  (WEB-PATH-LENGTH)
+                    METHOD      (WEB-METHOD)
+                    MEDIATYPE   (THE-MEDIA)
+                    INTO        (CONVERSE-RESPONSE)
+                    TOLENGTH    (CONVERSE-LENGTH)
+                    MAXLENGTH   (CONVERSE-LENGTH)
+                    FROM        (TC-VALUE)
+                    FROMLENGTH  (LENGTH OF TC-VALUE)
+                    STATUSCODE  (WEB-STATUS-CODE)
+                    STATUSLEN   (WEB-STATUS-LENGTH)
+                    STATUSTEXT  (WEB-STATUS-TEXT)
+                    QUERYSTRING (THE-QUERYSTRING)
+                    QUERYSTRLEN (THE-QUERYSTRING-LENGTH)
+                    CLICONVERT
+                    CLOSE
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+           IF  WEB-METHOD EQUAL DFHVALUE(DELETE)
+           OR  WEB-METHOD EQUAL DFHVALUE(GET)
+               EXEC CICS WEB CONVERSE
+                    SESSTOKEN   (SESSION-TOKEN)
+                    PATH        (WEB-PATH)
+                    PATHLENGTH  (WEB-PATH-LENGTH)
+                    METHOD      (WEB-METHOD)
+                    MEDIATYPE   (THE-MEDIA)
+                    INTO        (CONVERSE-RESPONSE)
+                    TOLENGTH    (CONVERSE-LENGTH)
+                    MAXLENGTH   (CONVERSE-LENGTH)
+                    STATUSCODE  (WEB-STATUS-CODE)
+                    STATUSLEN   (WEB-STATUS-LENGTH)
+                    STATUSTEXT  (WEB-STATUS-TEXT)
+                    QUERYSTRING (THE-QUERYSTRING)
+                    QUERYSTRLEN (THE-QUERYSTRING-LENGTH)
+                    CLICONVERT
+                    CLOSE
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+       0400-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00312300
+      ***************************************************************** 00311600
+      * Issue WEB SEND.                                               * 00311700
+      * The SEND, just as an example, uses the URIMAP instead of the  * 00311700
+      * PATH and PATHLENGTH parameters, while the CONVERSE uses the   * 00311700
+      * PATH and PATHLENGTH parameters.  This comparison is only to   * 00311700
+      * demonstrate both techniques.                                  * 00311700
+      ***************************************************************** 00311800
+       0410-WEB-SEND.                                                   00311900
+           IF  WEB-METHOD EQUAL DFHVALUE(POST)
+           OR  WEB-METHOD EQUAL DFHVALUE(PUT)
+               EXEC CICS WEB SEND
+                    SESSTOKEN   (SESSION-TOKEN)
+                    URIMAP      (THE-URIMAP)
+                    METHOD      (WEB-METHOD)
+                    MEDIATYPE   (THE-MEDIA)
+                    FROM        (TC-VALUE)
+                    FROMLENGTH  (LENGTH OF TC-VALUE)
+                    QUERYSTRING (THE-QUERYSTRING)
+                    QUERYSTRLEN (THE-QUERYSTRING-LENGTH)
+                    CLICONVERT
+                    CLOSE
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+           IF  WEB-METHOD EQUAL DFHVALUE(DELETE)
+           OR  WEB-METHOD EQUAL DFHVALUE(GET)
+               EXEC CICS WEB SEND
+                    SESSTOKEN   (SESSION-TOKEN)
+                    URIMAP      (THE-URIMAP)
+                    METHOD      (WEB-METHOD)
+                    MEDIATYPE   (THE-MEDIA)
+                    QUERYSTRING (THE-QUERYSTRING)
+                    QUERYSTRLEN (THE-QUERYSTRING-LENGTH)
+                    CLICONVERT
+                    CLOSE
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+       0410-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+      ***************************************************************** 00311600
+      * Issue WEB RECEIVE.                                            * 00311700
+      * The RECEIVE, as an example, uses the URIMAP instead of the    * 00311700
+      * PATH and PATHLENGTH parameters, while the CONVERSE uses the   * 00311700
+      * PATH and PATHLENGTH parameters.  This comparison is only to   * 00311700
+      * demonstrate both techniques.                                  * 00311700
+      ***************************************************************** 00311800
+       0420-WEB-RECEIVE.                                                00311900
+           IF  WEB-METHOD EQUAL DFHVALUE(POST)
+           OR  WEB-METHOD EQUAL DFHVALUE(PUT)
+               EXEC CICS WEB RECEIVE
+                    SESSTOKEN   (SESSION-TOKEN)
+                    INTO        (CONVERSE-RESPONSE)
+                    LENGTH      (CONVERSE-LENGTH)
+                    MAXLENGTH   (CONVERSE-LENGTH)
+                    STATUSCODE  (WEB-STATUS-CODE)
+                    STATUSLEN   (WEB-STATUS-LENGTH)
+                    STATUSTEXT  (WEB-STATUS-TEXT)
+                    CLICONVERT
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+           IF  WEB-METHOD EQUAL DFHVALUE(DELETE)
+           OR  WEB-METHOD EQUAL DFHVALUE(GET)
+               EXEC CICS WEB RECEIVE
+                    SESSTOKEN   (SESSION-TOKEN)
+                    INTO        (CONVERSE-RESPONSE)
+                    LENGTH      (CONVERSE-LENGTH)
+                    MAXLENGTH   (CONVERSE-LENGTH)
+                    STATUSCODE  (WEB-STATUS-CODE)
+                    STATUSLEN   (WEB-STATUS-LENGTH)
+                    STATUSTEXT  (WEB-STATUS-TEXT)
+                    CLICONVERT
+                    NOHANDLE
+               END-EXEC.
+                                                                        00312300
+       0420-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00312300
+                                                                        00315700
+      ***************************************************************** 00311600
+      * Close WEB connection.                                         * 00311700
+      ***************************************************************** 00311800
+       0500-WEB-CLOSE.                                                  00311900
+                                                                        00312300
+           EXEC CICS WEB CLOSE
+                SESSTOKEN(SESSION-TOKEN)
+                NOHANDLE
+           END-EXEC.
+                                                                        00312300
+       0500-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Return to CICS                                                * 00314800
+      ***************************************************************** 00314900
+       0900-RETURN.                                                     00315000
+                                                                        00315100
+           MOVE WEB-STATUS-CODE      TO TC-STATUS.
+           MOVE WEB-STATUS-TEXT      TO TC-TEXT.
+           MOVE CONVERSE-RESPONSE    TO TC-RESPONSE.
+                                                                        00315100
+           INSPECT TC-RESPONSE
+           REPLACING ALL X'0D' BY SPACE.
+                                                                        00315100
+           INSPECT TC-RESPONSE
+           REPLACING ALL X'0A' BY SPACE.
+                                                                        00315100
+           INSPECT TC-RESPONSE
+           REPLACING ALL X'25' BY SPACE.
+
+           MOVE TC-INPUT             TO TC-COMMAND.
+
+           EXEC CICS SEND
+               FROM(TC-DISPLAY)
+               ERASE
+               LENGTH(LENGTH OF TC-DISPLAY)
+               NOHANDLE
+           END-EXEC.
+
+           EXEC CICS RETURN                                             00315200
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       0900-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+                                                                        00110000
