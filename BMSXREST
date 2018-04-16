@@ -1,0 +1,987 @@
+       CBL CICS("SP")                                                   00010000
+       IDENTIFICATION DIVISION.                                         00020000
+       PROGRAM-ID. BMSXREST.                                            00030000
+      ***************************************************************** 00040000
+      *                                                               * 00050000
+      * Authors:  Randy Frerking and Rich Jackson                     * 00062000
+      *           Walmart Technology                                  * 00062000
+      *                                                               * 00050000
+      * This program executes as a terminal transaction to perform    * 00062000
+      * Create, Read, Update, Delete (CRUD) requests.                 * 00063000
+      *                                                               * 00066000
+      * This program performs both presentation logic (PL) and        * 00063000
+      * business logic (BL) using Basic Mapping Support (BMS).        * 00063000
+      *                                                               * 00066000
+      * Date       Name    Description                                * 00067000
+      * --------- ------- ------------------------------------------- * 00068000
+      *                                                               * 00069000
+      * 2016/09/11 Randy   Create base code                           * 00070000
+RF01  * 2016/09/11 Randy   Modernization using REST, supporting XML,  * 00070000
+      *                    JSON and TEXT, as well as 3270 BMS.        * 00070000
+      *                                                               * 00069000
+      ***************************************************************** 00071600
+       ENVIRONMENT DIVISION.                                            00071700
+       DATA DIVISION.                                                   00071800
+       WORKING-STORAGE SECTION.                                         00071900
+                                                                        00072000
+      ***************************************************************** 00073000
+      * Start - Dynamic Storage (DFHEISTG)                            * 00074000
+      ***************************************************************** 00075000
+       01  EDGEMAP                PIC  X(08) VALUE 'EDGEMAP '.          00077000
+       01  APPLID                 PIC  X(08) VALUE SPACES.              00077000
+       01  START-CODE             PIC  X(02) VALUE SPACES.
+       01  EIGHTY                 PIC S9(04) COMP  VALUE 80.            00079000
+
+      ***************************************************************** 00234400
+      * Start - 3270 terminal resources                               * 00234500
+      ***************************************************************** 00234600
+       01  TC-LENGTH              PIC S9(04) VALUE ZEROES COMP.
+
+       01  TC-200                 PIC  9(03) VALUE 200.
+       01  TC-400                 PIC  9(03) VALUE 400.
+       01  TC-404                 PIC  9(03) VALUE 404.
+       01  TC-409                 PIC  9(03) VALUE 409.
+       01  TC-500                 PIC  9(03) VALUE 500.
+
+       01  TC-SELECTED            PIC  X(16) VALUE 'Record Selected '.
+       01  TC-INSERTED            PIC  X(16) VALUE 'Record Inserted '.
+       01  TC-UPDATED             PIC  X(16) VALUE 'Record Updated  '.
+       01  TC-DELETED             PIC  X(16) VALUE 'Record Deleted  '.
+       01  TC-DUPLICATE           PIC  X(16) VALUE 'Duplicate Record'.
+       01  TC-NOTFOUND            PIC  X(16) VALUE 'Record Not Found'.
+       01  TC-INVALID             PIC  X(16) VALUE 'Invalid Request '.
+       01  TC-ERROR               PIC  X(16) VALUE 'Request Failed  '.
+
+       01  TC-RESPONSE.
+           05  TC-RETURN-CODE     PIC  9(03) VALUE ZEROES.
+           05  FILLER             PIC  X(01) VALUE '-'.
+           05  TC-RETURN-TEXT     PIC  X(56) VALUE SPACES.
+
+      ***************************************************************** 00234400
+      * End   - 3270 terminal resources                               * 00234500
+      ***************************************************************** 00234600
+
+      ***************************************************************** 00234400
+      * Start - BMS, XML and JSON language structures                 * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+       COPY EDGEMAP.
+RF01   COPY EDGEREST.
+
+      ***************************************************************** 00234400
+      * End   - BMS, XML and JSON language structures                 * 00234500
+      ***************************************************************** 00234600
+                                                                        00308500
+      ***************************************************************** 00234400
+      * Start - EDGEDEMO file resources                               * 00234500
+      ***************************************************************** 00234600
+       01  FC-FCT                 PIC  X(08) VALUE 'CICSBMS '.          00232300
+       01  FC-RESPONSE            PIC S9(08) COMP VALUE ZEROES.         00232000
+       01  FC-LENGTH              PIC S9(04) COMP VALUE 512.            00232000
+                                                                        00232100
+       01  FC-RECORD.                                                   00232200
+           02  FC-KEY             PIC  9(05) VALUE ZEROES.              00232300
+           02  FILLER REDEFINES FC-KEY.
+               05  FC-Account     PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-FirstName       PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-LastName        PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-StreetNumber    PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-StreetName      PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-City            PIC  X(20).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-State           PIC  X(02).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-ZipCode         PIC  9(05).
+           02  FILLER             PIC  X(01) VALUE SPACES.
+           02  FC-Comment         PIC  X(60).
+           02  FILLER             PIC  X(88) VALUE SPACES.
+                                                                        00308500
+      ***************************************************************** 00234400
+      * End   - EDGEDEMO file resources                               * 00234500
+      ***************************************************************** 00234600
+                                                                        00233800
+RF01  ***************************************************************** 00007600
+RF01  * Start - XML and JSON Transform resources                      * 00007800
+RF01  ***************************************************************** 00008000
+RF01   01  TEXT-DATA              PIC  X(16) VALUE 'TEXT-DATA       '.  00008100
+RF01   01  XML-DATA               PIC  X(16) VALUE 'XML-DATA        '.  00008200
+RF01                                                                    00008400
+RF01   01  ELEMENT-NAME-LENGTH    PIC S9(08) COMP  VALUE 08.            00008500
+RF01   01  ELEMENT-NAME           PIC  X(80) VALUE SPACES.              00008600
+RF01   01  ELEMENT-EDGEREST       PIC  X(08) VALUE 'EDGEREST'.          00008800
+RF01                                                                    00008900
+RF01   01  CHANNEL-FIELDS.                                              00009000
+RF01       05  XML-CHANNEL        PIC  X(16) VALUE 'XML-CHANNEL     '.  00009100
+RF01       05  FILLER             PIC  X(15) VALUE SPACES.              00009200
+RF01                                                                    00009300
+RF01   01  XMLTRANSFORM-NAMES.                                          00009400
+RF01       05  EDGEXML            PIC  X(32) VALUE 'EdgeXML         '.  00009500
+RF01       05  EDGEJSON           PIC  X(32) VALUE 'EdgeJSON        '.  00009500
+RF01                                                                    00010000
+RF01   01  WEB-BUFFER-LENGTH      PIC S9(08) COMP  VALUE 768.           00008400
+RF01   01  XML-BUFFER-LENGTH      PIC S9(08) COMP  VALUE 768.           00008400
+RF01   01  JSON-BUFFER-LENGTH     PIC S9(08) COMP  VALUE 768.           00008400
+RF01                                                                    00010000
+RF01   01  FILLER.
+RF01       02  WEB-BUFFER         PIC X(768) VALUE LOW-VALUES.
+RF01       02  FILLER REDEFINES WEB-BUFFER.
+RF01           05  XML-BUFFER     PIC X(768).
+RF01       02  FILLER REDEFINES WEB-BUFFER.
+RF01           05  JSON-BUFFER    PIC X(768).
+RF01                                                                    00234100
+RF01   01  TRANSFORM-CHANNEL      PIC  X(16) VALUE 'DFHJSON-TRANSFRM'.  00076000
+RF01   01  TRANSFORM-EDGEJSON     PIC  X(16) VALUE 'EdgeJSON        '.  00076000
+RF01   01  TRANSFORM-CONTAINER    PIC  X(16) VALUE 'DFHJSON-TRANSFRM'.  00076000
+RF01   01  DATA-CONTAINER         PIC  X(16) VALUE 'DFHJSON-DATA    '.  00076000
+RF01   01  JSON-CONTAINER         PIC  X(16) VALUE 'DFHJSON-JSON    '.  00076000
+RF01   01  JVM-CONTAINER          PIC  X(16) VALUE 'DFHJSON-JVMSERVR'.  00076000
+RF01   01  ERROR-CONTAINER        PIC  X(16) VALUE 'DFHJSON-ERROR   '.  00076000
+RF01   01  ERRORMSG-CONTAINER     PIC  X(16) VALUE 'DFHJSON-ERRORMSG'.  00076000
+RF01   01  RESPONSE-CONTAINER     PIC  X(16) VALUE 'DFHRESPONSE     '.  00076000
+RF01                                                                    00072000
+RF01   01  JSON-JVMSERVER         PIC  X(08) VALUE 'JSONJVM'.           00072000
+RF01   01  DFHJSON                PIC  X(08) VALUE 'DFHJSON '.          00076000
+RF01                                                                    00072000
+RF01   01  JSON-ERROR             PIC S9(08) COMP  VALUE ZEROES.
+RF01   01  JSON-ERRORMSG          PIC  X(80) VALUE SPACES.
+RF01                                                                    00110000
+RF01  ***************************************************************** 00007600
+RF01  * End   - XML and JSON Transform resources                      * 00007800
+RF01  ***************************************************************** 00008000
+
+RF01  ***************************************************************** 00234400
+RF01  * Start - HTTP/REST resources                                   * 00234500
+RF01  ***************************************************************** 00234600
+RF01   01  WEB-RESPONSE           PIC S9(08) COMP VALUE ZEROES.         02200099
+RF01   01  WEB-PATH-LENGTH        PIC S9(08) COMP VALUE 80.             02250099
+RF01   01  WEB-HTTPMETHOD-LENGTH  PIC S9(08) COMP VALUE 10.             02250099
+RF01   01  WEB-QUERYSTRING-LENGTH PIC S9(08) COMP VALUE 20.             02250099
+RF01                                                                    02300099
+RF01   01  WEB-QUERYSTRING        PIC  X(20) VALUE SPACES.              02310099
+RF01   01  WEB-HTTPMETHOD         PIC  X(10) VALUE SPACES.              02310099
+RF01   01  WEB-HTTP-PUT           PIC  X(10) VALUE 'PUT'.               02320099
+RF01   01  WEB-HTTP-GET           PIC  X(10) VALUE 'GET'.               02330099
+RF01   01  WEB-HTTP-POST          PIC  X(10) VALUE 'POST'.              02340099
+RF01   01  WEB-HTTP-DELETE        PIC  X(10) VALUE 'DELETE'.            02350099
+RF01                                                                    02360099
+RF01   01  WEB-MEDIA-TYPE         PIC  X(56) VALUE LOW-VALUES.          01910099
+RF01   01  WEB-PATH               PIC  X(80) VALUE LOW-VALUES.          02400099
+RF01                                                                    01990099
+RF01   01  HTTP-TEXT-PLAIN        PIC  X(56) VALUE 'text/plain'.
+RF01   01  HTTP-TEXT-XML          PIC  X(56) VALUE 'text/xml  '.
+RF01   01  HTTP-TEXT-JSON         PIC  X(56) VALUE 'text/json '.
+RF01   01  HTTP-STATUS-TEXT       PIC  X(80) VALUE SPACES.              01511099
+RF01                                                                    01990099
+RF01   01  HTTP-STATUS-CODE       PIC S9(04) COMP VALUE ZEROES.         01380099
+RF01   01  HTTP-STATUS-LENGTH     PIC S9(08) COMP VALUE ZEROES.         01480099
+RF01   01  HTTP-SEND-ACTION       PIC S9(08) COMP VALUE ZEROES.         02130099
+RF01
+RF01   01  HEADER-ACAO.
+RF01       02  FILLER             PIC  X(16) VALUE 'Access-Control-A'.
+RF01       02  FILLER             PIC  X(11) VALUE 'llow-Origin'.
+RF01                                                                    02360099
+RF01   01  HEADER-ACAO-LENGTH     PIC S9(08) COMP VALUE 27.             02360099
+RF01                                                                    02360099
+RF01   01  VALUE-ACAO             PIC  X(01) VALUE '*'.                 02360099
+RF01   01  VALUE-ACAO-LENGTH      PIC S9(08) COMP VALUE 01.             02360099
+RF01                                                                    02360099
+RF01   01  FILLER.                                                      01844610
+RF01     02  QS-FIELD             PIC  X(10).                           01844610
+RF01     02  QS-ACCOUNT           PIC  9(05).                           01844710
+RF01                                                                    01900000
+RF01  ***************************************************************** 00234400
+RF01  * End   - HTTP/REST resources                                   * 00234500
+RF01  ***************************************************************** 00234600
+
+      ***************************************************************** 00073000
+      * End   - Dynamic Storage (DFHEISTG)                            * 00074000
+      ***************************************************************** 00075000
+
+       COPY DFHAID.
+
+      ***************************************************************** 00073000
+      * Start - Linkage Section                                       * 00074000
+      ***************************************************************** 00075000
+       LINKAGE SECTION.                                                 00233900
+       01  DFHCOMMAREA.                                                 00234000
+           05  CA-Account         PIC  9(05).
+                                                                        00234100
+      ***************************************************************** 00073000
+      * End   - Linkage Section                                       * 00074000
+      ***************************************************************** 00073000
+                                                                        00234100
+       PROCEDURE DIVISION.                                              00234200
+                                                                        00234300
+      ***************************************************************** 00234400
+      * Main process.                                                 * 00234500
+      ***************************************************************** 00234600
+           PERFORM 0000-ASSIGN            THRU 0000-EXIT.               00234700
+
+           IF  EIBCALEN   EQUAL ZEROES
+RF01       AND START-CODE EQUAL 'TD'
+               PERFORM 0100-SEND-MAP      THRU 0100-EXIT
+               PERFORM 9000-RETURN        THRU 9000-EXIT.
+
+RF01       IF  START-CODE EQUAL 'TD'
+               PERFORM 0200-RECEIVE-MAP   THRU 0200-EXIT                00234700
+RF01       ELSE
+RF01           PERFORM 0210-WEB-RECEIVE   THRU 0210-EXIT.               00234700
+
+           PERFORM 0300-FILE-ACCESS       THRU 0300-EXIT.               00234700
+
+RF01       IF  START-CODE EQUAL 'TD'
+               PERFORM 0400-SEND-MAP      THRU 0400-EXIT
+               PERFORM 9100-TRANSID       THRU 9100-EXIT
+RF01       ELSE
+RF01           PERFORM 0410-WEB-SEND      THRU 0410-EXIT
+RF01           PERFORM 9000-RETURN        THRU 9000-EXIT.
+
+      ***************************************************************** 00236000
+      * Assign CICS resources                                         * 00237000
+      ***************************************************************** 00238000
+       0000-ASSIGN.                                                     00239000
+           EXEC CICS ASSIGN
+                APPLID   (APPLID)
+RF01            STARTCODE(START-CODE)
+           END-EXEC.
+
+       0000-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Send initial MAP.                                             * 00237000
+      ***************************************************************** 00238000
+       0100-SEND-MAP.                                                   00239000
+
+           EXEC CICS SEND                                               12730025
+                MAP   (EDGEMAP)                                         12740025
+                MAPONLY                                                 12740025
+                ERASE                                                   12740025
+                FREEKB                                                  12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+           PERFORM 9100-TRANSID           THRU 9100-EXIT.
+
+       0100-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Receive request.                                              * 00237000
+      ***************************************************************** 00238000
+       0200-RECEIVE-MAP.                                                00239000
+           EXEC CICS RECEIVE                                            12730025
+                MAP(EDGEMAP)                                            12740025
+                INTO(EDGEMAPI)                                          12740025
+                NOHANDLE                                                12800025
+           END-EXEC.                                                    12810000
+
+       0200-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+RF01  ***************************************************************** 00236000
+RF01  * Receive request (HTTP/REST)                                   * 00237000
+RF01  ***************************************************************** 00238000
+RF01   0210-WEB-RECEIVE.                                                00239000
+RF01       EXEC CICS WEB EXTRACT                                        04002099
+RF01            PATH        (WEB-PATH)                                  04010099
+RF01            PATHLENGTH  (WEB-PATH-LENGTH)                           04020099
+RF01            HTTPMETHOD  (WEB-HTTPMETHOD)                            04006099
+RF01            METHODLENGTH(WEB-HTTPMETHOD-LENGTH)                     04006099
+RF01            QUERYSTRING (WEB-QUERYSTRING)                           04006099
+RF01            QUERYSTRLEN (WEB-QUERYSTRING-LENGTH)                    04006099
+RF01            NOHANDLE                                                04070099
+RF01       END-EXEC.                                                    04080099
+RF01                                                                    04001399
+RF01       IF  WEB-QUERYSTRING-LENGTH GREATER THAN ZERO
+RF01           UNSTRING WEB-QUERYSTRING(1:WEB-QUERYSTRING-LENGTH)       04281010
+RF01               DELIMITED BY '='                                     04290000
+RF01               INTO      QS-FIELD                                   04300010
+RF01                         QS-ACCOUNT                                 04300010
+RF01                                                                    04370000
+RF01           MOVE QS-ACCOUNT TO AccountI.                             04090099
+RF01                                                                    04001399
+RF01       EXEC CICS WEB RECEIVE                                        00990099
+RF01            INTO     (WEB-BUFFER)                                   00990099
+RF01            LENGTH   (WEB-BUFFER-LENGTH)                            00990099
+RF01            MAXLENGTH(WEB-BUFFER-LENGTH)                            00990099
+RF01            MEDIATYPE(WEB-MEDIA-TYPE)                               00990099
+RF01            RESP     (WEB-RESPONSE)                                 10990099
+RF01            SRVCONVERT                                              20990099
+RF01            NOHANDLE                                                00990099
+RF01       END-EXEC.                                                    00990099
+RF01                                                                    04760099
+RF01       INSPECT WEB-MEDIA-TYPE(1:10)                                 04760099
+RF01           CONVERTING "ABCDEFGHIJKLMNOPQRSTUVWXYZ"                  04760099
+RF01                   TO "abcdefghijklmnopqrstuvwxyz".                 04760099
+RF01                                                                    04760099
+RF01       IF  WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-XML(1:10)
+RF01       OR  WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-JSON(1:10)
+RF01           NEXT SENTENCE
+RF01       ELSE
+RF01           MOVE HTTP-TEXT-PLAIN    TO WEB-MEDIA-TYPE.
+RF01
+RF01       IF  WEB-HTTPMETHOD EQUAL WEB-HTTP-POST
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-PUT
+RF01           PERFORM 0220-CHECK-MEDIA   THRU 0220-EXIT.
+RF01
+RF01   0210-EXIT.                                                       00239000
+RF01       EXIT.                                                        04090099
+                                                                        00235000
+RF01  ***************************************************************** 00236000
+RF01  * Check MEDIA type and transform accordingly.                   * 00237000
+RF01  ***************************************************************** 00238000
+RF01   0220-CHECK-MEDIA.                                                00239000
+RF01       IF  WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-XML(1:10)
+RF01           PERFORM 1000-XML-TO-DATA   THRU 1000-EXIT.               04760099
+RF01                                                                    04760099
+RF01       IF  WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-JSON(1:10)
+RF01           PERFORM 2000-JSON-TO-DATA  THRU 2000-EXIT.               04760099
+RF01                                                                    04760099
+RF01   0220-EXIT.                                                       00239000
+RF01       EXIT.                                                        04090099
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Process VSAM file request.                                    * 00237000
+      ***************************************************************** 00238000
+       0300-FILE-ACCESS.                                                00239000
+           MOVE TC-400                    TO TC-RETURN-CODE.
+           MOVE TC-INVALID                TO TC-RETURN-TEXT.
+           MOVE TC-RESPONSE               TO ResponseO.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF1
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-GET
+               PERFORM 0310-READ        THRU 0310-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF2
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-POST
+               PERFORM 0320-CREATE      THRU 0320-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF3
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-PUT
+               PERFORM 0330-UPDATE      THRU 0330-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHPF4
+RF01       OR  WEB-HTTPMETHOD EQUAL WEB-HTTP-DELETE
+               PERFORM 0340-DELETE      THRU 0340-EXIT.
+                                                                        00235000
+           IF  EIBAID         EQUAL DFHCLEAR
+               PERFORM 8000-CLEAR       THRU 8000-EXIT
+               PERFORM 9000-RETURN      THRU 9000-RETURN.
+                                                                        00235000
+           IF  TC-RETURN-CODE EQUAL TC-400
+               PERFORM 9200-ERASE       THRU 9200-EXIT.
+
+       0300-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Read   VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0310-READ.                                                       00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE FC-ACCOUNT            TO AccountI
+               MOVE FC-FIRSTNAME          TO FNameI
+               MOVE FC-LASTNAME           TO LNameI
+               MOVE FC-STREETNUMBER       TO SNumberI
+               MOVE FC-STREETNAME         TO SNameI
+               MOVE FC-CITY               TO CityI
+               MOVE FC-STATE              TO StateI
+               MOVE FC-ZIPCODE            TO ZipCodeI
+               MOVE FC-Comment            TO CommentI
+
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-SELECTED           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               PERFORM 9200-ERASE       THRU 9200-EXIT
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               PERFORM 9200-ERASE       THRU 9200-EXIT
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+       0310-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Create VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0320-CREATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           IF  AccountI     NOT EQUAL LOW-VALUES
+               MOVE AccountI                  TO FC-Account.
+           IF  FNameI       NOT EQUAL LOW-VALUES
+               MOVE FNameI                    TO FC-FirstName.
+           IF  LNameI       NOT EQUAL LOW-VALUES
+               MOVE LNameI                    TO FC-LastName.
+           IF  SNumberI     NOT EQUAL LOW-VALUES
+               MOVE SNumberI                  TO FC-StreetNumber.
+           IF  SNameI       NOT EQUAL LOW-VALUES
+               MOVE SNameI                    TO FC-StreetName.
+           IF  CityI        NOT EQUAL LOW-VALUES
+               MOVE CityI                     TO FC-City.
+           IF  StateI       NOT EQUAL LOW-VALUES
+               MOVE StateI                    TO FC-State.
+           IF  ZipCodeI     NOT EQUAL LOW-VALUES
+               MOVE ZipCodeI                  TO FC-ZipCode.
+           IF  CommentI     NOT EQUAL LOW-VALUES
+               MOVE CommentI                  TO FC-Comment.
+
+           EXEC CICS WRITE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-INSERTED           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(DUPREC)
+               MOVE TC-409                TO TC-RETURN-CODE
+               MOVE TC-DUPLICATE          TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(DUPREC)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0320-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Read for update)                          * 00237000
+      ***************************************************************** 00238000
+       0330-UPDATE.                                                     00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS READ
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                INTO  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+                UPDATE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               PERFORM 0331-REWRITE     THRU 0331-EXIT.
+
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0330-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Update VSAM record (Rewrite)                                  * 00237000
+      ***************************************************************** 00238000
+       0331-REWRITE.                                                    00239000
+           MOVE LENGTH OF FC-RECORD       TO FC-LENGTH.
+
+           IF  FNameI         NOT EQUAL LOW-VALUES
+               MOVE FNameI                    TO FC-FirstName.
+
+           IF  LNameI         NOT EQUAL LOW-VALUES
+               MOVE LNameI                    TO FC-LastName.
+
+           IF  SNumberI       NOT EQUAL LOW-VALUES
+               MOVE SNumberI                  TO FC-StreetNumber.
+
+           IF  SNameI         NOT EQUAL LOW-VALUES
+               MOVE SNameI                    TO FC-StreetName.
+
+           IF  CityI          NOT EQUAL LOW-VALUES
+               MOVE CityI                     TO FC-City.
+
+           IF  StateI         NOT EQUAL LOW-VALUES
+               MOVE StateI                    TO FC-State.
+
+           IF  ZipCodeI       NOT EQUAL LOW-VALUES
+               MOVE ZipCodeI                  TO FC-ZipCode.
+
+           IF  CommentI       NOT EQUAL LOW-VALUES
+               MOVE CommentI                  TO FC-Comment.
+
+           EXEC CICS REWRITE
+                FILE  (FC-FCT)
+                FROM  (FC-RECORD)
+                LENGTH(FC-LENGTH)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-UPDATED            TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RESPONSE.
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0331-EXIT.                                                       00239000
+           EXIT.
+                                                                        00235000
+      ***************************************************************** 00236000
+      * Delete VSAM record.                                           * 00237000
+      ***************************************************************** 00238000
+       0340-DELETE.                                                     00239000
+           MOVE AccountI                  TO FC-KEY.
+
+           EXEC CICS DELETE
+                FILE  (FC-FCT)
+                RIDFLD(FC-KEY)
+                NOHANDLE
+           END-EXEC.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NORMAL)
+               MOVE TC-200                TO TC-RETURN-CODE
+               MOVE TC-DELETED            TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP EQUAL DFHRESP(NOTFND)
+               MOVE TC-404                TO TC-RETURN-CODE
+               MOVE TC-NOTFOUND           TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           IF  EIBRESP NOT EQUAL DFHRESP(NOTFND)
+           AND EIBRESP NOT EQUAL DFHRESP(NORMAL)
+               MOVE TC-500                TO TC-RETURN-CODE
+               MOVE TC-ERROR              TO TC-RETURN-TEXT
+               MOVE TC-RESPONSE           TO ResponseO.
+                                                                        00110000
+           PERFORM 9200-ERASE           THRU 9200-EXIT.
+
+       0340-EXIT.                                                       00239000
+           EXIT.
+                                                                        00315700
+      ***************************************************************** 00314700
+      * Send response.                                                * 00314800
+      ***************************************************************** 00314900
+       0400-SEND-MAP.                                                   00315000
+
+           EXEC CICS SEND                                               00315200
+                MAP   (EDGEMAP)
+                FROM  (EDGEMAPO)
+                ERASE
+                NOHANDLE
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       0400-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00315700
+RF01  ***************************************************************** 00314700
+RF01  * Send response (HTTP/REST)                                     * 00314800
+RF01  ***************************************************************** 00314900
+RF01   0410-WEB-SEND.                                                   00315000
+RF01       MOVE DFHVALUE(IMMEDIATE)       TO HTTP-SEND-ACTION.          14530000
+RF01       MOVE TC-RETURN-CODE            TO HTTP-STATUS-CODE.
+RF01       MOVE TC-RESPONSE               TO HTTP-STATUS-TEXT.
+RF01       MOVE EIGHTY                    TO HTTP-STATUS-LENGTH.
+RF01       MOVE LENGTH OF WEB-BUFFER      TO WEB-BUFFER-LENGTH.
+RF01                                                                    14765636
+RF01       IF  TC-RETURN-CODE       EQUAL TC-200
+RF01       AND WEB-HTTPMETHOD       EQUAL WEB-HTTP-GET
+RF01       AND WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-XML(1:10)
+RF01           PERFORM 3000-DATA-TO-XML   THRU 3000-EXIT.               04760099
+RF01                                                                    04760099
+RF01       IF  TC-RETURN-CODE       EQUAL TC-200
+RF01       AND WEB-HTTPMETHOD       EQUAL WEB-HTTP-GET
+RF01       AND WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-JSON(1:10)
+RF01           PERFORM 4000-DATA-TO-JSON  THRU 4000-EXIT.               04760099
+RF01                                                                    04760099
+RF01       IF  TC-RETURN-CODE       EQUAL TC-200
+RF01       AND WEB-HTTPMETHOD       EQUAL WEB-HTTP-GET
+RF01       AND WEB-MEDIA-TYPE(1:10) EQUAL HTTP-TEXT-PLAIN(1:10)
+RF01           PERFORM 5000-DATA-TO-TEXT  THRU 5000-EXIT.               04760099
+RF01                                                                    04760099
+RF01       IF  WEB-HTTPMETHOD  NOT  EQUAL WEB-HTTP-GET
+RF01           MOVE HTTP-STATUS-TEXT      TO WEB-BUFFER
+RF01           MOVE HTTP-STATUS-LENGTH    TO WEB-BUFFER-LENGTH.
+RF01                                                                    04760099
+RF01       EXEC CICS WEB WRITE                                          00315400
+RF01            HTTPHEADER (HEADER-ACAO)                                00315400
+RF01            NAMELENGTH (HEADER-ACAO-LENGTH)                         00315400
+RF01            VALUE      (VALUE-ACAO)                                 00315400
+RF01            VALUELENGTH(VALUE-ACAO-LENGTH)                          00315400
+RF01            NOHANDLE                                                00315400
+RF01       END-EXEC.                                                    00315400
+RF01                                                                    00315400
+RF01       EXEC CICS WEB SEND                                           14766136
+RF01            FROM      (WEB-BUFFER)                                  14766236
+RF01            FROMLENGTH(WEB-BUFFER-LENGTH)                           14766336
+RF01            STATUSCODE(HTTP-STATUS-CODE)                            14766636
+RF01            STATUSTEXT(HTTP-STATUS-TEXT)                            14766736
+RF01            STATUSLEN (HTTP-STATUS-LENGTH)                          14766836
+RF01            ACTION    (HTTP-SEND-ACTION)                            14766436
+RF01            MEDIATYPE (HTTP-TEXT-PLAIN)                             14766536
+RF01            SRVCONVERT                                              14766936
+RF01            NOHANDLE                                                14767036
+RF01       END-EXEC.                                                    14767136
+RF01                                                                    14767236
+RF01   0410-EXIT.                                                       00315500
+RF01       EXIT.                                                        00315600
+RF01                                                                    00315700
+RF01                                                                    00110000
+RF01  ***************************************************************** 00029000
+RF01  ** Translate XML to DATA.                                      ** 00020100
+RF01  ***************************************************************** 00029200
+RF01   1000-XML-TO-DATA.                                                00029300
+RF01       EXEC CICS PUT                                                00029800
+RF01            CONTAINER(XML-DATA)                                     00029800
+RF01            CHANNEL  (XML-CHANNEL)                                  00029900
+RF01            FROM     (WEB-BUFFER)                                   00030000
+RF01            FLENGTH  (WEB-BUFFER-LENGTH)                            00030100
+RF01            NOHANDLE                                                00030200
+RF01       END-EXEC.                                                    00030300
+RF01                                                                    00032500
+RF01       MOVE ELEMENT-EDGEREST            TO ELEMENT-NAME.            00110000
+RF01       MOVE LENGTH OF ELEMENT-EDGEREST  TO ELEMENT-NAME-LENGTH.     00110000
+RF01                                                                    00025000
+RF01       EXEC CICS TRANSFORM XMLTODATA                                00033800
+RF01            CHANNEL     (XML-CHANNEL)                               00033900
+RF01            DATCONTAINER(TEXT-DATA)                                 00034000
+RF01            XMLCONTAINER(XML-DATA)                                  00034100
+RF01            XMLTRANSFORM(EDGEXML)                                   00034200
+RF01            ELEMNAME    (ELEMENT-NAME)                              00034300
+RF01            ELEMNAMELEN (ELEMENT-NAME-LENGTH)                       00034400
+RF01            NOHANDLE                                                00034500
+RF01       END-EXEC.                                                    00034600
+RF01                                                                    00034700
+RF01       EXEC CICS GET                                                00036200
+RF01            CONTAINER(TEXT-DATA)                                    00036200
+RF01            CHANNEL  (XML-CHANNEL)                                  00036300
+RF01            FLENGTH  (LENGTH OF EDGEREST)                           00036400
+RF01            INTO     (EDGEREST)                                     00036500
+RF01            NOHANDLE                                                00036600
+RF01       END-EXEC.                                                    00036700
+RF01                                                                    00036800
+RF01       MOVE Account                     TO AccountI.
+RF01       MOVE FirstName                   TO FNameI.
+RF01       MOVE LastName                    TO LNameI.
+RF01       MOVE StreetNumber                TO SNumberI.
+RF01       MOVE StreetName                  TO SNameI.
+RF01       MOVE City                        TO CityI.
+RF01       MOVE State                       TO StateI.
+RF01       MOVE ZipCode                     TO ZipCodeI.
+RF01       MOVE Comment                     TO CommentI.
+RF01
+RF01   1000-EXIT.                                                       00035100
+RF01       EXIT.                                                        00035200
+RF01                                                                    00018000
+RF01  ***************************************************************** 00234400
+RF01  * Transform JSON to DATA.                                       * 12460000
+RF01  ***************************************************************** 00234600
+RF01   2000-JSON-TO-DATA.                                               00315000
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(JSON-CONTAINER)                               00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (WEB-BUFFER)                                   00072000
+RF01            FLENGTH  (WEB-BUFFER-LENGTH)                            00072000
+RF01            NOHANDLE                                                00072000
+RF01            CHAR                                                    00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(TRANSFORM-CONTAINER)                          00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (TRANSFORM-EDGEJSON)                           00072000
+RF01            NOHANDLE                                                00072000
+RF01            CHAR                                                    00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(JVM-CONTAINER)                                00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (JSON-JVMSERVER )                              00072000
+RF01            NOHANDLE                                                00072000
+RF01            CHAR                                                    00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS LINK                                               00072000
+RF01            PROGRAM  (DFHJSON)                                      00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(ERROR-CONTAINER)                              00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (JSON-ERROR)                                   00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(ERRORMSG-CONTAINER)                           00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (JSON-ERRORMSG)                                00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(DATA-CONTAINER)                               00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (EDGEREST)                                     00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    00072000
+RF01       MOVE Account                     TO AccountI.
+RF01       MOVE FirstName                   TO FNameI.
+RF01       MOVE LastName                    TO LNameI.
+RF01       MOVE StreetNumber                TO SNumberI.
+RF01       MOVE StreetName                  TO SNameI.
+RF01       MOVE City                        TO CityI.
+RF01       MOVE State                       TO StateI.
+RF01       MOVE ZipCode                     TO ZipCodeI.
+RF01       MOVE Comment                     TO CommentI.
+RF01                                                                    00072000
+RF01   2000-EXIT.                                                       00315500
+RF01       EXIT.                                                        00315600
+RF01                                                                    00315700
+RF01  ***************************************************************** 00020000
+RF01  ** Translate DATA to XML.                                      ** 00020100
+RF01  ***************************************************************** 00020200
+RF01   3000-DATA-TO-XML.                                                00020300
+RF01       MOVE AccountI                    TO Account.
+RF01       MOVE FNameI                      TO FirstName.
+RF01       MOVE LNameI                      TO LastName.
+RF01       MOVE SNumberI                    TO StreetNumber.
+RF01       MOVE SNameI                      TO StreetName.
+RF01       MOVE CityI                       TO City.
+RF01       MOVE StateI                      TO State.
+RF01       MOVE ZipCodeI                    TO ZipCode.
+RF01       MOVE CommentI                    TO Comment.
+RF01       MOVE ResponseI                   TO Response.
+RF01                                                                    00072000
+RF01       EXEC CICS PUT                                                00020800
+RF01            CONTAINER(TEXT-DATA)                                    00020800
+RF01            CHANNEL  (XML-CHANNEL)                                  00020900
+RF01            FROM     (EDGEREST)                                     00021000
+RF01            FLENGTH  (LENGTH OF EDGEREST)                           00021100
+RF01            NOHANDLE                                                00021200
+RF01       END-EXEC.                                                    00021300
+RF01                                                                    00025000
+RF01       MOVE ELEMENT-EDGEREST            TO ELEMENT-NAME.            00110000
+RF01       MOVE LENGTH OF ELEMENT-EDGEREST  TO ELEMENT-NAME-LENGTH.     00110000
+RF01                                                                    00025000
+RF01       EXEC CICS TRANSFORM DATATOXML                                00025300
+RF01            CHANNEL     (XML-CHANNEL)                               00025400
+RF01            DATCONTAINER(TEXT-DATA)                                 00025500
+RF01            XMLCONTAINER(XML-DATA)                                  00025600
+RF01            XMLTRANSFORM(EDGEXML)                                   00025700
+RF01            ELEMNAME    (ELEMENT-NAME)                              00025800
+RF01            ELEMNAMELEN (ELEMENT-NAME-LENGTH)                       00025900
+RF01            NOHANDLE                                                00026000
+RF01       END-EXEC.                                                    00026100
+RF01                                                                    00026500
+RF01       MOVE LENGTH OF XML-BUFFER  TO XML-BUFFER-LENGTH.             00027300
+RF01                                                                    00027400
+RF01       EXEC CICS GET                                                00027500
+RF01            CONTAINER(XML-DATA)                                     00027500
+RF01            CHANNEL  (XML-CHANNEL)                                  00027600
+RF01            FLENGTH  (XML-BUFFER-LENGTH)                            00027700
+RF01            INTO     (XML-BUFFER)                                   00027800
+RF01            NOHANDLE                                                00027900
+RF01       END-EXEC.                                                    00028000
+RF01                                                                    00028400
+RF01       MOVE XML-BUFFER-LENGTH     TO WEB-BUFFER-LENGTH.
+RF01
+RF01   3000-EXIT.                                                       00028200
+RF01       EXIT.                                                        00028300
+RF01                                                                    00235000
+RF01  ***************************************************************** 00234400
+RF01  * Transform DATA to JSON.                                       * 12460000
+RF01  ***************************************************************** 00234600
+RF01   4000-DATA-TO-JSON.                                               00315000
+RF01       MOVE AccountI                    TO Account.
+RF01       MOVE FNameI                      TO FirstName.
+RF01       MOVE LNameI                      TO LastName.
+RF01       MOVE SNumberI                    TO StreetNumber.
+RF01       MOVE SNameI                      TO StreetName.
+RF01       MOVE CityI                       TO City.
+RF01       MOVE StateI                      TO State.
+RF01       MOVE ZipCodeI                    TO ZipCode.
+RF01       MOVE CommentI                    TO Comment.
+RF01       MOVE ResponseI                   TO Response.
+RF01                                                                    00072000
+RF01       MOVE LENGTH OF JSON-BUFFER       TO JSON-BUFFER-LENGTH.      00027300
+RF01                                                                    00027400
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(DATA-CONTAINER)                               00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (EDGEREST)                                     00072000
+RF01            FLENGTH  (LENGTH OF EDGEREST)                           00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(TRANSFORM-CONTAINER)                          00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (TRANSFORM-EDGEJSON)                           00072000
+RF01            NOHANDLE                                                00072000
+RF01            CHAR                                                    00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS PUT                                                00072000
+RF01            CONTAINER(JVM-CONTAINER)                                00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            FROM     (JSON-JVMSERVER )                              00072000
+RF01            NOHANDLE                                                00072000
+RF01            CHAR                                                    00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS LINK                                               00072000
+RF01            PROGRAM  (DFHJSON)                                      00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(ERROR-CONTAINER)                              00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (JSON-ERROR)                                   00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(ERRORMSG-CONTAINER)                           00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (JSON-ERRORMSG)                                00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    12870000
+RF01       EXEC CICS GET                                                00072000
+RF01            CONTAINER(JSON-CONTAINER)                               00072000
+RF01            CHANNEL  (TRANSFORM-CHANNEL)                            00072000
+RF01            INTO     (JSON-BUFFER)                                  00072000
+RF01            FLENGTH  (JSON-BUFFER-LENGTH)                           00072000
+RF01            NOHANDLE                                                00072000
+RF01       END-EXEC.                                                    00072000
+RF01                                                                    00072000
+RF01       MOVE JSON-BUFFER-LENGTH    TO WEB-BUFFER-LENGTH.
+RF01
+RF01   4000-EXIT.                                                       00315500
+RF01       EXIT.                                                        00315600
+RF01                                                                    00315700
+RF01  ***************************************************************** 00020000
+RF01  ** Translate DATA to TEXT format.                              ** 00020100
+RF01  ***************************************************************** 00020200
+RF01   5000-DATA-TO-TEXT.                                               00020300
+RF01       MOVE AccountI                    TO Account.
+RF01       MOVE FNameI                      TO FirstName.
+RF01       MOVE LNameI                      TO LastName.
+RF01       MOVE SNumberI                    TO StreetNumber.
+RF01       MOVE SNameI                      TO StreetName.
+RF01       MOVE CityI                       TO City.
+RF01       MOVE StateI                      TO State.
+RF01       MOVE ZipCodeI                    TO ZipCode.
+RF01       MOVE CommentI                    TO Comment.
+RF01       MOVE ResponseI                   TO Response.
+RF01                                                                    00028400
+RF01       MOVE EDGEREST                    TO WEB-BUFFER.
+RF01       MOVE LENGTH OF EDGEREST          TO WEB-BUFFER-LENGTH.
+RF01
+RF01   5000-EXIT.                                                       00028200
+RF01       EXIT.                                                        00028300
+RF01                                                                    00235000
+      ***************************************************************** 00314700
+      * Clear screen                                                  * 00314800
+      ***************************************************************** 00314900
+       8000-CLEAR.                                                      00315000
+                                                                        00315100
+           EXEC CICS SEND
+                FROM(EIBTRNID)
+                LENGTH(0)
+                ERASE
+                NOHANDLE
+           END-EXEC.
+
+       8000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Return to CICS                                                * 00314800
+      ***************************************************************** 00314900
+       9000-RETURN.                                                     00315000
+                                                                        00315100
+           EXEC CICS RETURN                                             00315200
+           END-EXEC.                                                    00315300
+                                                                        00315400
+       9000-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Return to CICS with next TRANSID.                             * 00314800
+      ***************************************************************** 00314900
+       9100-TRANSID.                                                    00315000
+                                                                        00315100
+           EXEC CICS RETURN
+                TRANSID (EIBTRNID)
+                COMMAREA(FC-KEY)
+                LENGTH  (LENGTH OF FC-KEY)
+                NOHANDLE
+           END-EXEC.
+                                                                        00315400
+       9100-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
+      ***************************************************************** 00314700
+      * Erase screen                                                  * 00314800
+      ***************************************************************** 00314900
+       9200-ERASE.                                                      00315000
+           MOVE LOW-VALUES                TO FNameO.
+           MOVE LOW-VALUES                TO LNameO.
+           MOVE LOW-VALUES                TO SNumberO.
+           MOVE LOW-VALUES                TO SNameO.
+           MOVE LOW-VALUES                TO CityO.
+           MOVE LOW-VALUES                TO StateO.
+           MOVE LOW-VALUES                TO ZipCodeO.
+           MOVE LOW-VALUES                TO CommentO.
+
+       9200-EXIT.                                                       00315500
+           EXIT.                                                        00315600
+                                                                        00110000
